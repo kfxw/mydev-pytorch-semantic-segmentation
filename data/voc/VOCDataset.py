@@ -172,6 +172,8 @@ class VOCValDataset(torchdata.Dataset):
         # load img and seg list
         self.list_sample = open(opt.val_list_file, 'r').readlines()
 
+        # collect image per batch
+        self.batch_record_list = []
         self.cur_idx = 0
 
         if max_sample > 0:
@@ -227,7 +229,7 @@ class VOCValDataset(torchdata.Dataset):
 	    # 4 substract mean and normalize std
             img = self.img_transform(torch.from_numpy(img.copy()))
 	    # 5 pad images to a fixed size
-	    [img_height, img_width, _] = img.shape
+	    [_, img_height, img_width] = img.shape
 	    assert(self.cropSize >= img_height)		# cropSize needs to be larger than image size
 	    assert(self.cropSize >= img_width)
 	    h_padSize = self.cropSize - img_height

@@ -54,7 +54,7 @@ import argparse
 from distutils.version import LooseVersion
 import torch
 import torch.nn as nn
-from data.voc.VOCDataset import VOCTrainDataset
+from data.voc.VOCDataset import VOCValDataset
 from networks import VGGModelBuilder, ResNetModelBuilder, SegmentationModule
 from utils import AverageMeter
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
