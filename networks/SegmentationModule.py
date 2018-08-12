@@ -7,14 +7,13 @@ class SegmentationModuleBase(nn.Module):
     def __init__(self):
         super(SegmentationModuleBase, self).__init__()
 
-    def pixel_acc(self, pred, label):
+    def pixel_acc(self, pred, label, ignore_label):
         _, preds = torch.max(pred, dim=1)
-        valid = (label >= 0).long()
+        valid = ((label >= 0) & (label != ignore_label)).long()
         acc_sum = torch.sum(valid * (preds == label).long())
         pixel_sum = torch.sum(valid)
         acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
         return acc
-
 
 class SegmentationModule(SegmentationModuleBase):
     def __init__(self, net_enc, net_dec, crit, deep_sup_scale=None):
@@ -25,18 +24,23 @@ class SegmentationModule(SegmentationModuleBase):
         self.deep_sup_scale = deep_sup_scale
 
     def forward(self, feed_dict, segSize=None):
-        if segSize is None: # training
+	current_gpu = torch.cuda.current_device()
+        if self.encoder.training is True: # training, only effected by .train() and .eval()
+	    segSize = feed_dict['seg_label'][0].size()
             if self.deep_sup_scale is not None: # use deep supervision technique
-                (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True))
+                (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu),
+					 return_feature_maps=True), segSize=segSize)
+		pred = pred.cpu(); pred_deepsup = pred_deepsup.cpu();
             else:
-                pred = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True))
+                pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu),
+					 return_feature_maps=True), segSize=segSize).cpu()
 
             loss = self.crit(pred, feed_dict['seg_label'])
             if self.deep_sup_scale is not None:
                 loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
                 loss = loss + loss_deepsup * self.deep_sup_scale
 
-            acc = self.pixel_acc(pred, feed_dict['data'])
+            acc = self.pixel_acc(pred, feed_dict['seg_label'], self.crit.ignore_index)
             return loss, acc
         else: # inference
             pred = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True), segSize=segSize)

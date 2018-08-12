@@ -28,7 +28,7 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
     # main loop
     tic = time.time()
     for i in range(args.epoch_iters):
-        batch_data = next(iterator)
+        batch_data = next(iterator)[0]
         data_time.update(time.time() - tic)
 
         segmentation_module.zero_grad()
@@ -55,7 +55,7 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
         if i % args.display_interval == 0:
             print('Epoch: [{}][{}/{}], Time: {:.2f}, Data: {:.2f}, '
                   'lr_encoder: {:.6f}, lr_decoder: {:.6f}, '
-                  'Accuracy: {:4.2f}, Loss: {:.6f}'
+                  'Training accuracy: {:4.2f}, Loss: {:.6f}'
                   .format(epoch, i, args.epoch_iters,
                           batch_time.average(), data_time.average(),
                           args.running_lr_encoder, args.running_lr_decoder,
@@ -64,11 +64,54 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
             fractional_epoch = epoch - 1 + 1. * i / args.epoch_iters
             history['train']['epoch'].append(fractional_epoch)
             history['train']['loss'].append(loss.data[0])
-            history['train']['acc'].append(acc.data[0])
+            history['train']['train_acc'].append(acc.data[0])
 
         # adjust learning rate
         cur_iter = i + (epoch - 1) * args.epoch_iters
         adjust_learning_rate(optimizers, cur_iter, args)
+
+
+def evaluate(segmentation_module, loader, args):
+    acc_meter = AverageMeter()
+    intersection_meter = AverageMeter()
+    union_meter = AverageMeter()
+    cls_ious_meter = AverageMeter()
+    cls_mean_iou_meter = AverageMeter()
+
+    segmentation_module.eval()
+
+    for i, batch_data in enumerate(loader):
+        # process data
+        seg_label = as_numpy(batch_data['seg_label'])
+
+        with torch.no_grad():
+            segSize = (seg_label.shape[0], seg_label.shape[1])
+            pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
+
+            # forward pass
+            pred = segmentation_module(batch_data, segSize=segSize)
+            _, preds = torch.max(pred.data.cpu(), dim=1)
+            preds = as_numpy(preds.squeeze(0))
+
+        # calculate accuracy
+        acc, pix = accuracy(preds, seg_label, 255)
+        intersection, union, cls_ious, cls_mean_iou = intersectionAndUnion(preds, seg_label, args.num_class, 255)
+        acc_meter.update(acc, pix)
+        intersection_meter.update(intersection)
+        union_meter.update(union)
+	cls_ious_meter.update(cls_ious)
+	cls_mean_iou_meter.update(cls_mean_iou)
+        print('[{}] iter {}, accuracy: {}'
+              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc))
+
+    for i, _iou in enumerate(cls_ious_meter):
+        print('class [{}], IoU: {}'.format(i, _iou))
+
+    print('[Eval Summary]:')
+    print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
+          .format(cls_mean_iou.average(), acc_meter.average()*100))
+
+    return cls_ious.average(), cls_mean_iou.average()
 
 
 def checkpoint(nets, history, args, epoch_num):
@@ -148,10 +191,11 @@ def main(args):
         weights=args.weights_encoder)
     net_decoder = builder.build_decoder(
         arch=args.arch_decoder,
+	fc_dim=1024,
         num_class=args.num_class,
         weights=args.weights_decoder)
 
-    crit = nn.NLLLoss(ignore_index=-1)
+    crit = nn.CrossEntropyLoss(ignore_index=255)
 
     if args.arch_decoder.endswith('deepsup'):
         segmentation_module = SegmentationModule(
@@ -162,20 +206,29 @@ def main(args):
 
     # Dataset and Loader
     dataset_train = VOCTrainDataset(args, batch_per_gpu=args.batch_size_per_gpu)
-
     loader_train = torchdata.DataLoader(
         dataset_train,
-        batch_size=args.num_gpus,  # we have modified data_parallel
-        shuffle=False,  # we do not use this param
+        batch_size=1,  # data_parallel have been modified, not useful
+        shuffle=False,  # do not use this param
         collate_fn=user_scattered_collate,
         num_workers=8,
         drop_last=True,
         pin_memory=True)
 
+    dataset_val = VOCValDataset(args, val_batch_size=1)
+    loader_val = torchdata.DataLoader(
+        dataset_val,
+        batch_size=1,	# data_parallel have been modified, not useful
+        shuffle=False,
+        collate_fn=user_scattered_collate,
+        num_workers=5,
+        drop_last=False)
+
     print('1 Epoch = {} iters'.format(args.epoch_iters))
 
     # create loader iterator
     iterator_train = iter(loader_train)
+    iterator_val = iter(loader_val)
 
     # load nets into gpu
     if args.num_gpus > 1:
@@ -191,10 +244,19 @@ def main(args):
     optimizers = create_optimizers(nets, args)
 
     # Main loop
-    history = {'train': {'epoch': [], 'loss': [], 'acc': []}}
+    history = {'train': {'epoch': [], 'loss': [], 'train_acc': [], 'test_ious': [], 'test_mean_iou': []}}
 
     for epoch in range(args.start_epoch, args.num_epoch + 1):
         train(segmentation_module, iterator_train, optimizers, history, epoch, args)
+
+	# test/validate
+	if epoch % args.test_epoch_interval == 0 or epoch == args.num_epoch:
+	    (cls_ious, cls_mean_iou) = evaluate(segmentation_module, iterator_val, args)
+	    history['train']['test_ious'].append(cls_ious)
+	    history['train']['test_mean_iou'].append(cls_mean_iou)
+	else:
+	    history['train']['test_ious'].append(-1)	# empty data
+	    history['train']['test_mean_iou'].append(-1)
 
         # checkpointing
         checkpoint(nets, history, args, epoch)

@@ -105,7 +105,7 @@ def accuracy(preds, label):
     return acc, valid_sum
 
 
-def intersectionAndUnion(imPred, imLab, numClass):
+def intersectionAndUnion(imPred, imLab, numClass, ignore_label):
     imPred = np.asarray(imPred).copy()
     imLab = np.asarray(imLab).copy()
 
@@ -113,7 +113,7 @@ def intersectionAndUnion(imPred, imLab, numClass):
     imLab += 1
     # Remove classes from unlabeled pixels in gt image.
     # We should not penalize detections in unlabeled portions of the image.
-    imPred = imPred * (imLab > 0)
+    imPred = imPred * ((imLab > 0) & (imLab != ignore_label))
 
     # Compute area intersection:
     intersection = imPred * (imPred == imLab)
@@ -125,7 +125,11 @@ def intersectionAndUnion(imPred, imLab, numClass):
     (area_lab, _) = np.histogram(imLab, bins=numClass, range=(1, numClass))
     area_union = area_pred + area_lab - area_intersection
 
-    return (area_intersection, area_union)
+    # IoU for each class and the mean IoU
+    cls_iou = area_intersection / (area_union + 1e-10)
+    mean_iou = cls_iou.mean(axis=None)
+
+    return (area_intersection, area_union, cls_iou, mean_iou)
 
 
 class NotSupportedCliException(Exception):

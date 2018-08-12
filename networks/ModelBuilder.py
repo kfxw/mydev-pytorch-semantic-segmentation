@@ -17,44 +17,41 @@ class ModelBuilder():
 
     def build_decoder(self, arch='ppm_bilinear_deepsup',
                       fc_dim=512, num_class=150,
-                      weights='', use_softmax=False):
-        if arch == 'c1_bilinear_deepsup':
+                      weights=''):
+        if arch == 'c0_bilinear':
+            net_decoder = C0Bilinear(
+                num_class=num_class,
+                fc_dim=fc_dim)
+        elif arch == 'c1_bilinear_deepsup':
             net_decoder = C1BilinearDeepSup(
                 num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+                fc_dim=fc_dim)
         elif arch == 'c1_bilinear':
             net_decoder = C1Bilinear(
                 num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+                fc_dim=fc_dim)
         elif arch == 'ppm_bilinear':
             net_decoder = PPMBilinear(
                 num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+                fc_dim=fc_dim)
         elif arch == 'ppm_bilinear_deepsup':
             net_decoder = PPMBilinearDeepsup(
                 num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+                fc_dim=fc_dim)
         elif arch == 'upernet_lite':
             net_decoder = UPerNet(
                 num_class=num_class,
                 fc_dim=fc_dim,
-                use_softmax=use_softmax,
                 fpn_dim=256)
         elif arch == 'upernet':
             net_decoder = UPerNet(
                 num_class=num_class,
                 fc_dim=fc_dim,
-                use_softmax=use_softmax,
                 fpn_dim=512)
         elif arch == 'upernet_tmp':
             net_decoder = UPerNetTmp(
                 num_class=num_class,
                 fc_dim=fc_dim,
-                use_softmax=use_softmax,
                 fpn_dim=512)
         else:
             raise Exception('Architecture undefined!')
@@ -80,11 +77,26 @@ def conv3x3_bn_relu(in_planes, out_planes, stride=1):
             nn.ReLU(inplace=True),
             )
 
+# last conv and no 3x3, bilinear upsample
+class C0Bilinear(nn.Module):
+    def __init__(self, num_class=150, fc_dim=2048):
+        super(C0Bilinear, self).__init__()
+
+        # last conv
+        self.conv_last = nn.Conv2d(fc_dim, num_class, 1, 1, 0)
+
+    def forward(self, conv_out, segSize=None):
+        conv5 = conv_out[-1]
+        x = self.conv_last(conv5)
+	x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
+
+        return x
+
 # last conv, bilinear upsample
 class C1BilinearDeepSup(nn.Module):
-    def __init__(self, num_class=150, fc_dim=2048, use_softmax=False):
+    def __init__(self, num_class=150, fc_dim=2048):
         super(C1BilinearDeepSup, self).__init__()
-        self.use_softmax = use_softmax
 
         self.cbr = conv3x3_bn_relu(fc_dim, fc_dim // 4, 1)
         self.cbr_deepsup = conv3x3_bn_relu(fc_dim // 2, fc_dim // 4, 1)
@@ -99,28 +111,23 @@ class C1BilinearDeepSup(nn.Module):
         x = self.cbr(conv5)
         x = self.conv_last(x)
 
-        if self.use_softmax:  # is True during inference
-            x = nn.functional.upsample(
-                x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
-            return x
-
         # deep sup
         conv4 = conv_out[-2]
         _ = self.cbr_deepsup(conv4)
         _ = self.conv_last_deepsup(_)
 
-        x = nn.functional.log_softmax(x, dim=1)
-        _ = nn.functional.log_softmax(_, dim=1)
+	x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
+	_ = nn.functional.upsample(_, size=segSize, mode='bilinear', align_corners=False)
+        _ = nn.functional.softmax(_, dim=1)
 
         return (x, _)
 
 
 # last conv, bilinear upsample
 class C1Bilinear(nn.Module):
-    def __init__(self, num_class=150, fc_dim=2048, use_softmax=False):
+    def __init__(self, num_class=150, fc_dim=2048):
         super(C1Bilinear, self).__init__()
-        self.use_softmax = use_softmax
 
         self.cbr = conv3x3_bn_relu(fc_dim, fc_dim // 4, 1)
 
@@ -132,22 +139,16 @@ class C1Bilinear(nn.Module):
         x = self.cbr(conv5)
         x = self.conv_last(x)
 
-        if self.use_softmax: # is True during inference
-            x = nn.functional.upsample(
-                x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
-        else:
-            x = nn.functional.log_softmax(x, dim=1)
+        x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
 
         return x
 
 
 # pyramid pooling, bilinear upsample
 class PPMBilinear(nn.Module):
-    def __init__(self, num_class=150, fc_dim=4096,
-                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
+    def __init__(self, num_class=150, fc_dim=4096, pool_scales=(1, 2, 3, 6)):
         super(PPMBilinear, self).__init__()
-        self.use_softmax = use_softmax
 
         self.ppm = []
         for scale in pool_scales:
@@ -182,21 +183,15 @@ class PPMBilinear(nn.Module):
 
         x = self.conv_last(ppm_out)
 
-        if self.use_softmax:  # is True during inference
-            x = nn.functional.upsample(
-                x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
-        else:
-            x = nn.functional.log_softmax(x, dim=1)
+        x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
         return x
 
 
 # pyramid pooling, bilinear upsample
 class PPMBilinearDeepsup(nn.Module):
-    def __init__(self, num_class=150, fc_dim=4096,
-                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
+    def __init__(self, num_class=150, fc_dim=4096, pool_scales=(1, 2, 3, 6)):
         super(PPMBilinearDeepsup, self).__init__()
-        self.use_softmax = use_softmax
 
         self.ppm = []
         for scale in pool_scales:
@@ -234,31 +229,25 @@ class PPMBilinearDeepsup(nn.Module):
 
         x = self.conv_last(ppm_out)
 
-        if self.use_softmax:  # is True during inference
-            x = nn.functional.upsample(
-                x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
-            return x
-
         # deep sup
         conv4 = conv_out[-2]
         _ = self.cbr_deepsup(conv4)
         _ = self.dropout_deepsup(_)
         _ = self.conv_last_deepsup(_)
 
-        x = nn.functional.log_softmax(x, dim=1)
-        _ = nn.functional.log_softmax(_, dim=1)
+	x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
+	_ = nn.functional.upsample(_, size=segSize, mode='bilinear', align_corners=False)
+        _ = nn.functional.softmax(_, dim=1)
 
         return (x, _)
 
 
 # upernet
 class UPerNet(nn.Module):
-    def __init__(self, num_class=150, fc_dim=4096,
-                 use_softmax=False, pool_scales=(1, 2, 3, 6),
+    def __init__(self, num_class=150, fc_dim=4096, pool_scales=(1, 2, 3, 6),
                  fpn_inplanes=(256,512,1024,2048), fpn_dim=256):
         super(UPerNet, self).__init__()
-        self.use_softmax = use_softmax
 
         # PPM Module
         self.ppm_pooling = []
@@ -332,12 +321,7 @@ class UPerNet(nn.Module):
         fusion_out = torch.cat(fusion_list, 1)
         x = self.conv_last(fusion_out)
 
-        if self.use_softmax:  # is True during inference
-            x = nn.functional.upsample(
-                x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
-            return x
-
-        x = nn.functional.log_softmax(x, dim=1)
+        x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
 
         return x

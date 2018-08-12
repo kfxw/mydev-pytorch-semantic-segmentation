@@ -81,7 +81,8 @@ class VGG16_20M(nn.Module):
     def forward(self, x, return_feature_maps=False):
         conv_out = []
 
-        x = self.conv1(x); conv_out.append(x);
+        x = self.conv1(x)
+	conv_out.append(x)
         x = self.conv2(x); conv_out.append(x);
         x = self.conv3(x); conv_out.append(x);
         x = self.conv4(x); conv_out.append(x);
