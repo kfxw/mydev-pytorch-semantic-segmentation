@@ -277,7 +277,7 @@ class VOCTestDataset(torchdata.Dataset):
 	img = self.img_transform(torch.from_numpy(img.copy()))
 
         output = dict()
-        output['data'] = img
+        output['data'] = img.unsqueeze(0)
         return output
 
     def __len__(self):
