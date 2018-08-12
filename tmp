@@ -123,3 +123,12 @@ batch_data = next(iterator_test)
 img = batch_data[0]['data'].cpu().numpy()
 plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
 plt.show()
+
+########################## for cfg file
+solver_cfg_name = "test_solver_cfg.py"
+solver_cfg_name = solver_cfg_name.strip().split('.')[-2]
+exec('from '+solver_cfg_name+' import opt')
+args = opt()
+print("Input arguments:")
+for key, val in vars(args).items():
+	print("{:16} {}".format(key, val))

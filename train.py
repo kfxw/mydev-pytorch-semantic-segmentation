@@ -209,7 +209,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--solver_config', type=str, help='name of training/testing configuration file. cfg file has to be at CURRENT DIRECTORY and ends with .py extension')
     args = parser.parse_args()
-    solver_cfg_name = args.solver_config.strip().split('.')[-1]
+    solver_cfg_name = args.solver_config.strip().split('.')[-2]
     exec('from '+solver_cfg_name+' import opt')
 
     args = opt()
