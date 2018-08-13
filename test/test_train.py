@@ -40,7 +40,7 @@ segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
 # 3. dataset
 dataset_train = VOCTrainDataset(args, batch_per_gpu=args.batch_size_per_gpu)
 loader_train = torchdata.DataLoader(dataset_train, batch_size=1, shuffle=False, collate_fn=user_scattered_collate,
-        num_workers=8, drop_last=True, pin_memory=True)
+        num_workers=1, drop_last=True, pin_memory=True)
 iterator_train = iter(loader_train)
 
 # 4. preprocess for training

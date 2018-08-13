@@ -161,10 +161,10 @@ class VOCTrainDataset(torchdata.Dataset):
 
 
 class VOCValDataset(torchdata.Dataset):
-    def __init__(self, opt, max_sample=-1, start_idx=-1, end_idx=-1, val_batch_size=1):
+    def __init__(self, opt, max_sample=-1, start_idx=-1, end_idx=-1):
         self.root_dataset = opt.root_dataset
         self.cropSize = opt.cropSize
-	self.val_batch_size = val_batch_size
+	self.val_batch_size = opt.val_batch_size
 
 	# mean and std, in BGR order
         self.img_transform = transforms.Compose([ transforms.Normalize(mean=[104.008, 116.669, 122.675], std=[1., 1., 1.]) ])
@@ -195,6 +195,7 @@ class VOCValDataset(torchdata.Dataset):
 	    # last batch of val data
             if self.cur_idx >= self.num_sample:
                 batch_records = self.batch_record_list
+		self.cur_idx = 0
                 break
 	    # finish a batch of val data
             if len(self.batch_record_list) == self.val_batch_size:

@@ -1,3 +1,6 @@
+import sys
+sys.path.append('../')
+
 import os
 import time
 import random
@@ -24,11 +27,27 @@ class opt():
 		self.train_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_trainval_aug.txt'
 		self.val_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_val.txt'
 		self.test_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_val.txt'
+		self.val_batch_size = 4
 
 arg = opt()
-dataset_val = VOCValDataset(arg, val_batch_size = 4)
-loader_val = torchdata.DataLoader(dataset_val, batch_size=1, shuffle=False, collate_fn=user_scattered_collate, num_workers=1, drop_last=False, pin_memory=True)
+dataset_val = VOCValDataset(arg)
+loader_val = torchdata.DataLoader(dataset_val, batch_size=4, shuffle=False, collate_fn=user_scattered_collate, num_workers=1, drop_last=True, pin_memory=False)
 iterator_val = iter(loader_val)
+batch_data = next(iterator_val)
+img = batch_data[0]['data'].cpu().numpy()
+plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
+plt.show()
+
+batch_data = next(iterator_val)
+img = batch_data[0]['data'].cpu().numpy()
+plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
+plt.show()
+
+batch_data = next(iterator_val)
+img = batch_data[0]['data'].cpu().numpy()
+plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
+plt.show()
+
 batch_data = next(iterator_val)
 img = batch_data[0]['data'].cpu().numpy()
 plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)

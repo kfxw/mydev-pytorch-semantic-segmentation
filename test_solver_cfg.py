@@ -6,22 +6,22 @@ class opt():
 		# [str], arch names for network encoder and decoder
 		#    see networks/ModelBuilder.py for decoder definitions and
 		#    the other files for encoder definitions
-		self.arch_encoder = 'resnet50_dilated8'
-		self.arch_decoder = 'ppm_bilinear_deepsup'
+		self.arch_encoder = 'vgg16_20M'
+		self.arch_decoder = 'c0_bilinear'
 		# [str/None], pretrained models to initialize the network
 		#    if None, the corresponding layers are randomly initialized
 		self.weights_encoder = ''
 		self.weights_decoder = ''
 		# [double/None], the weight of deep supervision loss
-		self.deep_sup_scale = 0.4
+		self.deep_sup_scale = None#0.4
 
 	## training settings
 		# [int], seed for random generators
 		self.seed = 304
 
 		## device related
-		# [int list], id of used gpus
-		self.gpu_id = [1]
+		# [int list], id of used gpus, begins from 0
+		self.gpu_id = [0]
 		# automatically obtained
 		self.num_gpus = len(self.gpu_id)
 		# [int], total batch size = num_gpu x batch_size_per_gpu
@@ -46,6 +46,12 @@ class opt():
 		# [str], the snapshot are saved at snapshot_prefix+id folder
 		self.snapshot_prefix = './trainingResults/'
 
+		## test settings
+		# [int], test the model for every test_epoch_interval epochs
+		self.test_epoch_interval = 2
+		# [int], batch size of validation
+		self.val_batch_size = 2
+
 	## dataset settings
 		# [str], dataset name, for display only
 		self.dataset_name = 'VOC2012aug'
@@ -63,9 +69,9 @@ class opt():
 		#   during testing, cropSize must be larger than image sizes and images are padded
 		self.cropSize = 512	# 512,328
 		# [bool], whether to conduct random horizontal flip during training
-		self.random_flip = True
+		self.random_flip = False#True
 		# [bool], whther to apply random resizing during training
-		self.random_scale = True
+		self.random_scale = False#True
 		# [double], if random_sace is True, belows decide the range of resizing factor
 		self.random_scale_factor_max = 1.2
 		self.random_scale_factor_min = 0.75

@@ -1,7 +1,7 @@
 import os, sys
 sys.path.append('../')
 
-import time
+import time, datetime
 import random
 import argparse
 from distutils.version import LooseVersion
@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from data.voc.VOCDataset import VOCValDataset
 from networks import VGGModelBuilder, ResNetModelBuilder, SegmentationModule
-from utils import AverageMeter
+from utils import AverageMeter, accuracy, intersectionAndUnion
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
 import lib.utils.data as torchdata
@@ -39,8 +39,8 @@ crit = nn.CrossEntropyLoss(ignore_index=255)
 segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
 
 # 3. dataset
-dataset_val = VOCValDataset(args, val_batch_size=2)
-loader_val = torchdata.DataLoader(dataset_val, batch_size=1, drop_last=False)
+dataset_val = VOCValDataset(args)
+loader_val = torchdata.DataLoader(dataset_val, batch_size=args.val_batch_size, shuffle=False, collate_fn=user_scattered_collate, num_workers=1, drop_last=False)
 iterator_val = iter(loader_val)
 
 nets = (net_encoder, net_decoder, crit)
@@ -56,13 +56,13 @@ def evaluate(segmentation_module, loader, args):
 
     segmentation_module.eval()
 
-    for i, batch_data in enumerate(loader):
-	print batch_data
+    for i in range(len(loader)):
+	batch_data = next(loader)[0]
         # process data
         seg_label = as_numpy(batch_data['seg_label'])
 
         with torch.no_grad():
-            segSize = (seg_label.shape[0], seg_label.shape[1])
+            segSize = (seg_label.shape[1], seg_label.shape[2])
             pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
 
             # forward pass
@@ -78,16 +78,18 @@ def evaluate(segmentation_module, loader, args):
         union_meter.update(union)
 	cls_ious_meter.update(cls_ious)
 	cls_mean_iou_meter.update(cls_mean_iou)
-        print('[{}] iter {}, accuracy: {}'
-              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc))
+        print('[{}] iter {}, accuracy: {}, mIoU: {}'
+              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, cls_mean_iou))
 
-    for i, _iou in enumerate(cls_ious_meter):
+    for i, _iou in enumerate(cls_ious):
         print('class [{}], IoU: {}'.format(i, _iou))
 
     print('[Eval Summary]:')
     print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
-          .format(cls_mean_iou.average(), acc_meter.average()*100))
+          .format(cls_mean_iou_meter.average(), acc_meter.average()*100))
 
-    return cls_ious.average(), cls_mean_iou.average()
+
+    return cls_ious_meter.average(), cls_mean_iou_meter.average()
 
 (cls_ious, cls_mean_iou) = evaluate(segmentation_module, iterator_val, args)
+print cls_ious, cls_mean_iou

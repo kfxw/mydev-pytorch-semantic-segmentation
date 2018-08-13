@@ -43,6 +43,6 @@ class SegmentationModule(SegmentationModuleBase):
             acc = self.pixel_acc(pred, feed_dict['seg_label'], self.crit.ignore_index)
             return loss, acc
         else: # inference
-            pred = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True), segSize=segSize)
+            pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu), return_feature_maps=True), segSize=segSize).cpu()
             return pred
 

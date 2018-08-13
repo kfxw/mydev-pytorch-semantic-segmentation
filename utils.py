@@ -97,8 +97,8 @@ def colorEncode(labelmap, colors, mode='BGR'):
         return labelmap_rgb
 
 
-def accuracy(preds, label):
-    valid = (label >= 0)
+def accuracy(preds, label, ignore_label):
+    valid = ((label >= 0) & (label != ignore_label))
     acc_sum = (valid * (preds == label)).sum()
     valid_sum = valid.sum()
     acc = float(acc_sum) / (valid_sum + 1e-10)
@@ -113,6 +113,7 @@ def intersectionAndUnion(imPred, imLab, numClass, ignore_label):
     imLab += 1
     # Remove classes from unlabeled pixels in gt image.
     # We should not penalize detections in unlabeled portions of the image.
+    #print imPred.shape, imLab.shape
     imPred = imPred * ((imLab > 0) & (imLab != ignore_label))
 
     # Compute area intersection:
@@ -128,6 +129,8 @@ def intersectionAndUnion(imPred, imLab, numClass, ignore_label):
     # IoU for each class and the mean IoU
     cls_iou = area_intersection / (area_union + 1e-10)
     mean_iou = cls_iou.mean(axis=None)
+
+    #print imLab[0,:5,:5], imPred.shape
 
     return (area_intersection, area_union, cls_iou, mean_iou)
 

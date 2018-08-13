@@ -30,8 +30,23 @@ class opt():
 
 arg = opt()
 dataset_train = VOCTrainDataset(arg, batch_per_gpu = 4)
-loader_train = torchdata.DataLoader(dataset_train, batch_size=4, shuffle=False, collate_fn=user_scattered_collate, num_workers=1, drop_last=True, pin_memory=True)
+loader_train = torchdata.DataLoader(dataset_train, batch_size=4, shuffle=False, collate_fn=user_scattered_collate, num_workers=1, drop_last=True, pin_memory=False)
 iterator_train = iter(loader_train)
+batch_data = next(iterator_train)
+img = batch_data[0]['data'].cpu().numpy()
+plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
+plt.show()
+
+batch_data = next(iterator_train)
+img = batch_data[0]['data'].cpu().numpy()
+plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
+plt.show()
+
+batch_data = next(iterator_train)
+img = batch_data[0]['data'].cpu().numpy()
+plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
+plt.show()
+
 batch_data = next(iterator_train)
 img = batch_data[0]['data'].cpu().numpy()
 plt.imshow(img[1,::-1,:,:].transpose(1,2,0)/255.0+0.5)
@@ -40,5 +55,3 @@ plt.show()
 seg = batch_data[0]['seg_label'].cpu().numpy()
 plt.imshow(seg[1,:,:])
 plt.show()
-
-plt.imshow(img[0,0,:,:])

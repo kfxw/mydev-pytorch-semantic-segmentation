@@ -1,6 +1,6 @@
 # System libs
 import os
-import time
+import time, datetime
 # import math
 import random
 import argparse
@@ -11,8 +11,9 @@ import torch.nn as nn
 # Our libs
 from data.voc.VOCDataset import VOCTrainDataset
 from networks import VGGModelBuilder, ResNetModelBuilder, SegmentationModule
-from utils import AverageMeter
+from utils import AverageMeter, accuracy, intersectionAndUnion
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
+from lib.utils import as_numpy, mark_volatile
 import lib.utils.data as torchdata
 
 
@@ -92,6 +93,7 @@ def evaluate(segmentation_module, loader, args):
             pred = segmentation_module(batch_data, segSize=segSize)
             _, preds = torch.max(pred.data.cpu(), dim=1)
             preds = as_numpy(preds.squeeze(0))
+	    print preds.shape
 
         # calculate accuracy
         acc, pix = accuracy(preds, seg_label, 255)
@@ -101,17 +103,17 @@ def evaluate(segmentation_module, loader, args):
         union_meter.update(union)
 	cls_ious_meter.update(cls_ious)
 	cls_mean_iou_meter.update(cls_mean_iou)
-        print('[{}] iter {}, accuracy: {}'
-              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc))
+        print('[{}] iter {}, accuracy: {}, mIoU: {}'
+              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, cls_mean_iou))
 
     for i, _iou in enumerate(cls_ious_meter):
         print('class [{}], IoU: {}'.format(i, _iou))
 
     print('[Eval Summary]:')
     print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
-          .format(cls_mean_iou.average(), acc_meter.average()*100))
+          .format(cls_mean_iou_meter.average(), acc_meter.average()*100))
 
-    return cls_ious.average(), cls_mean_iou.average()
+    return cls_ious_meter.average(), cls_mean_iou_meter.average()
 
 
 def checkpoint(nets, history, args, epoch_num):
@@ -211,17 +213,19 @@ def main(args):
         batch_size=1,  # data_parallel have been modified, not useful
         shuffle=False,  # do not use this param
         collate_fn=user_scattered_collate,
-        num_workers=8,
+        num_workers=1, # MUST be 1 or 0
         drop_last=True,
         pin_memory=True)
 
-    dataset_val = VOCValDataset(args, val_batch_size=1)
+    dataset_val = VOCValDataset(args)
     loader_val = torchdata.DataLoader(
         dataset_val,
-        batch_size=1,	# data_parallel have been modified, not useful
+	# data_parallel have been modified, MUST use val batch size
+	#   and collate_fn MUST be user_scattered_collate
+        batch_size=args.val_batch_size,	
         shuffle=False,
         collate_fn=user_scattered_collate,
-        num_workers=5,
+        num_workers=1, # MUST be 1 or 0
         drop_last=False)
 
     print('1 Epoch = {} iters'.format(args.epoch_iters))
