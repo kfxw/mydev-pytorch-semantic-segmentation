@@ -10,7 +10,7 @@ class opt():
 		self.arch_decoder = 'c0_bilinear'
 		# [str/None], pretrained models to initialize the network
 		#    if None, the corresponding layers are randomly initialized
-		self.weights_encoder = ''
+		self.weights_encoder = 'vgg16_20M.pkl'
 		self.weights_decoder = ''
 		# [double/None], the weight of deep supervision loss
 		self.deep_sup_scale = None#0.4
@@ -25,32 +25,32 @@ class opt():
 		# automatically obtained
 		self.num_gpus = len(self.gpu_id)
 		# [int], total batch size = num_gpu x batch_size_per_gpu
-		self.batch_size_per_gpu = 2
+		self.batch_size_per_gpu = 20
 
 		## optim related
 		# [str], optimizer, currently SGD only
 		self.optim = 'SGD'
 		# [double], base learning rates, momentum, weight decay
-		self.lr_encoder = 2e-2
-		self.lr_decoder = 2e-2
+		self.lr_encoder = 1e-8
+		self.lr_decoder = 1e-7
 		self.momentum = 0.9
-		self.weight_decay = 1e-4
+		self.weight_decay = 5e-4
 		# [double], the power used in lr poly stepping
-		self.lr_pow = 0.9
+		self.lr_pow = 1#0.9
 		# [int], max number of iteration epochs (begins from 1)
 		self.num_epoch = 20
 		# [int], the number of beginning epoch when resuming from a snapshot (begins from 1)
 		self.start_epoch = 1
 		# [int], iterations of each epoch (irrelevant to batch size)
-		self.epoch_iters = 5000
+		self.epoch_iters = 20#60#1
 		# [str], the snapshot are saved at snapshot_prefix+id folder
 		self.snapshot_prefix = './trainingResults/'
 
 		## test settings
 		# [int], test the model for every test_epoch_interval epochs
-		self.test_epoch_interval = 2
+		self.test_epoch_interval = 1
 		# [int], batch size of validation
-		self.val_batch_size = 2
+		self.val_batch_size = 4
 
 	## dataset settings
 		# [str], dataset name, for display only
@@ -67,9 +67,10 @@ class opt():
 		# [int], image size during training and testing
 		#   during training, images are cropped (or padded to) cropSize
 		#   during testing, cropSize must be larger than image sizes and images are padded
-		self.cropSize = 512	# 512,328
+		self.train_cropSize = 321	# 512,328
+		self.valtest_cropSize = 512
 		# [bool], whether to conduct random horizontal flip during training
-		self.random_flip = False#True
+		self.random_flip = False #True
 		# [bool], whther to apply random resizing during training
 		self.random_scale = False#True
 		# [double], if random_sace is True, belows decide the range of resizing factor

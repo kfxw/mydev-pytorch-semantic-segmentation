@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# caffe
+*.caffemodel
+
+trainingResults/*
+*.pth
+*.pkl
+tmp

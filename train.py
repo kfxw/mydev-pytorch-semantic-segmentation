@@ -9,12 +9,14 @@ from distutils.version import LooseVersion
 import torch
 import torch.nn as nn
 # Our libs
-from data.voc.VOCDataset import VOCTrainDataset
+from data.voc.VOCDataset import VOCTrainDataset, VOCValDataset
 from networks import VGGModelBuilder, ResNetModelBuilder, SegmentationModule
 from utils import AverageMeter, accuracy, intersectionAndUnion
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
 import lib.utils.data as torchdata
+
+import matplotlib.pyplot as plt
 
 
 # train one epoch
@@ -36,7 +38,7 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
 
         # forward pass
         loss, acc = segmentation_module(batch_data)
-        loss = loss.mean()
+        loss = loss/args.batch_size_per_gpu#.mean()
         acc = acc.mean()
 
         # Backward
@@ -54,13 +56,15 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
 
         # calculate accuracy, and display
         if i % args.display_interval == 0:
-            print('Epoch: [{}][{}/{}], Time: {:.2f}, Data: {:.2f}, '
-                  'lr_encoder: {:.6f}, lr_decoder: {:.6f}, '
-                  'Training accuracy: {:4.2f}, Loss: {:.6f}'
-                  .format(epoch, i, args.epoch_iters,
+            print('[{}] '
+		  'Epoch:[{}][{}/{}], Time(iter/data):{:.2f}/{:.2f}, '
+                  'lr(en/de):{:.2e}/{:.2e}, '
+                  'train acc: {:4.2f}, Loss: {:10.4f}'
+                  .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+			  epoch, i, args.epoch_iters,
                           batch_time.average(), data_time.average(),
                           args.running_lr_encoder, args.running_lr_decoder,
-                          ave_acc.average(), ave_total_loss.average()))
+                          ave_acc.value(), ave_total_loss.value()))
 
             fractional_epoch = epoch - 1 + 1. * i / args.epoch_iters
             history['train']['epoch'].append(fractional_epoch)
@@ -70,6 +74,9 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
         # adjust learning rate
         cur_iter = i + (epoch - 1) * args.epoch_iters
         adjust_learning_rate(optimizers, cur_iter, args)
+
+	#p=segmentation_module.state_dict()['decoder.conv_last.weight'][1,1,:,:]
+	#print p
 
 
 def evaluate(segmentation_module, loader, args):
@@ -81,19 +88,20 @@ def evaluate(segmentation_module, loader, args):
 
     segmentation_module.eval()
 
-    for i, batch_data in enumerate(loader):
+    for i in range(len(loader)):
+	batch_data = next(loader)[0]
+
         # process data
         seg_label = as_numpy(batch_data['seg_label'])
 
         with torch.no_grad():
-            segSize = (seg_label.shape[0], seg_label.shape[1])
+            segSize = (seg_label.shape[1], seg_label.shape[2])
             pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
 
             # forward pass
             pred = segmentation_module(batch_data, segSize=segSize)
             _, preds = torch.max(pred.data.cpu(), dim=1)
             preds = as_numpy(preds.squeeze(0))
-	    print preds.shape
 
         # calculate accuracy
         acc, pix = accuracy(preds, seg_label, 255)
@@ -106,10 +114,10 @@ def evaluate(segmentation_module, loader, args):
         print('[{}] iter {}, accuracy: {}, mIoU: {}'
               .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, cls_mean_iou))
 
-    for i, _iou in enumerate(cls_ious_meter):
-        print('class [{}], IoU: {}'.format(i, _iou))
+    for i, _iou in enumerate(cls_ious):
+        print('[{}] class [{}], IoU: {}'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, _iou))
 
-    print('[Eval Summary]:')
+    print('[{}] [Eval Summary]:'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
           .format(cls_mean_iou_meter.average(), acc_meter.average()*100))
 
@@ -117,7 +125,7 @@ def evaluate(segmentation_module, loader, args):
 
 
 def checkpoint(nets, history, args, epoch_num):
-    print('Saving checkpoints...')
+    print('[{}] Saving checkpoints...'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     (net_encoder, net_decoder, crit) = nets
     suffix_latest = 'epoch_{}.pth'.format(epoch_num)
 
@@ -135,16 +143,17 @@ def checkpoint(nets, history, args, epoch_num):
                '{}/decoder_{}'.format(args.snapshot_prefix, suffix_latest))
 
 
-def group_weight(module):
+def group_weight(module, base_lr):
     group_decay = []
     group_no_decay = []
+    group_no_decay_double_lr = []
     for m in module.modules():
         if isinstance(m, nn.Linear):
-            group_decay.append(m.weight)
+            group_no_decay_double_lr.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
         elif isinstance(m, nn.modules.conv._ConvNd):
-            group_decay.append(m.weight)
+            group_no_decay_double_lr.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
         elif isinstance(m, nn.modules.batchnorm._BatchNorm):
@@ -153,20 +162,20 @@ def group_weight(module):
             if m.bias is not None:
                 group_no_decay.append(m.bias)
 
-    assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)
-    groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]
+    assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay) + len(group_no_decay_double_lr)
+    groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0), dict(params=group_no_decay_double_lr, weight_decay=.0, lr=base_lr*2)]
     return groups
 
 
 def create_optimizers(nets, args):
     (net_encoder, net_decoder, crit) = nets
     optimizer_encoder = torch.optim.SGD(
-        group_weight(net_encoder),
+        group_weight(net_encoder, args.lr_encoder),
         lr=args.lr_encoder,
         momentum=args.momentum,
         weight_decay=args.weight_decay)
     optimizer_decoder = torch.optim.SGD(
-        group_weight(net_decoder),
+        group_weight(net_decoder, args.lr_decoder),
         lr=args.lr_decoder,
         momentum=args.momentum,
         weight_decay=args.weight_decay)
@@ -175,14 +184,16 @@ def create_optimizers(nets, args):
 
 def adjust_learning_rate(optimizers, cur_iter, args):
     scale_running_lr = ((1. - float(cur_iter) / args.max_iters) ** args.lr_pow)
+    change_multi_encoder = args.lr_encoder * scale_running_lr / args.running_lr_encoder
+    change_multi_decoder = args.lr_decoder * scale_running_lr / args.running_lr_decoder
     args.running_lr_encoder = args.lr_encoder * scale_running_lr
     args.running_lr_decoder = args.lr_decoder * scale_running_lr
 
     (optimizer_encoder, optimizer_decoder) = optimizers
     for param_group in optimizer_encoder.param_groups:
-        param_group['lr'] = args.running_lr_encoder
+        param_group['lr'] *= change_multi_encoder
     for param_group in optimizer_decoder.param_groups:
-        param_group['lr'] = args.running_lr_decoder
+        param_group['lr'] *= change_multi_decoder
 
 
 def main(args):
@@ -197,7 +208,7 @@ def main(args):
         num_class=args.num_class,
         weights=args.weights_decoder)
 
-    crit = nn.CrossEntropyLoss(ignore_index=255)
+    crit = nn.CrossEntropyLoss(ignore_index=255, reduction='sum')
 
     if args.arch_decoder.endswith('deepsup'):
         segmentation_module = SegmentationModule(
@@ -205,6 +216,7 @@ def main(args):
     else:
         segmentation_module = SegmentationModule(
             net_encoder, net_decoder, crit)
+    print segmentation_module
 
     # Dataset and Loader
     dataset_train = VOCTrainDataset(args, batch_per_gpu=args.batch_size_per_gpu)
@@ -217,22 +229,10 @@ def main(args):
         drop_last=True,
         pin_memory=True)
 
-    dataset_val = VOCValDataset(args)
-    loader_val = torchdata.DataLoader(
-        dataset_val,
-	# data_parallel have been modified, MUST use val batch size
-	#   and collate_fn MUST be user_scattered_collate
-        batch_size=args.val_batch_size,	
-        shuffle=False,
-        collate_fn=user_scattered_collate,
-        num_workers=1, # MUST be 1 or 0
-        drop_last=False)
-
-    print('1 Epoch = {} iters'.format(args.epoch_iters))
+    print('1 training epoch = {} iters'.format(args.epoch_iters))
 
     # create loader iterator
     iterator_train = iter(loader_train)
-    iterator_val = iter(loader_val)
 
     # load nets into gpu
     if args.num_gpus > 1:
@@ -251,16 +251,28 @@ def main(args):
     history = {'train': {'epoch': [], 'loss': [], 'train_acc': [], 'test_ious': [], 'test_mean_iou': []}}
 
     for epoch in range(args.start_epoch, args.num_epoch + 1):
-        train(segmentation_module, iterator_train, optimizers, history, epoch, args)
-
 	# test/validate
-	if epoch % args.test_epoch_interval == 0 or epoch == args.num_epoch:
+        dataset_val = VOCValDataset(args)	# create val dataset loader for every eval, in order to use drop_last=false
+        loader_val = torchdata.DataLoader(
+            dataset_val,
+	    # data_parallel have been modified, MUST use val batch size
+	    #   and collate_fn MUST be user_scattered_collate
+            batch_size=args.val_batch_size,	
+            shuffle=False,
+            collate_fn=user_scattered_collate,
+            num_workers=1, # MUST be 1 or 0
+            drop_last=False)
+        iterator_val = iter(loader_val)
+	if  epoch % args.test_epoch_interval == 0 or epoch == args.num_epoch:# epoch != 1 and
 	    (cls_ious, cls_mean_iou) = evaluate(segmentation_module, iterator_val, args)
 	    history['train']['test_ious'].append(cls_ious)
 	    history['train']['test_mean_iou'].append(cls_mean_iou)
 	else:
 	    history['train']['test_ious'].append(-1)	# empty data
 	    history['train']['test_mean_iou'].append(-1)
+
+	# train
+        train(segmentation_module, iterator_train, optimizers, history, epoch, args)
 
         # checkpointing
         checkpoint(nets, history, args, epoch)
@@ -294,7 +306,7 @@ if __name__ == '__main__':
     args.id += '_' + str(args.dataset_name)
     args.id += '_ngpus' + str(args.num_gpus)
     args.id += '_batchSize' + str(args.batch_size)
-    args.id += '_cropSize' + str(args.cropSize)
+    args.id += '_trainCropSize' + str(args.train_cropSize)
     args.id += '_LR_encoder' + str(args.lr_encoder)
     args.id += '_LR_decoder' + str(args.lr_decoder)
     args.id += '_epoch' + str(args.num_epoch)
