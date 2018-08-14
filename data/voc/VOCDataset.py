@@ -19,7 +19,7 @@ def round2nearest_multiple(x, p):
 class VOCTrainDataset(torchdata.Dataset):
     def __init__(self, opt, max_sample=-1, batch_per_gpu=1):
         self.root_dataset = opt.root_dataset
-        self.cropSize = opt.cropSize
+        self.cropSize = opt.train_cropSize
         self.random_flip = opt.random_flip
 	self.random_scale = opt.random_scale
 	self.random_scale_factor_min = 1
@@ -53,7 +53,7 @@ class VOCTrainDataset(torchdata.Dataset):
             self.list_sample = self.list_sample[0:max_sample]
         self.num_sample = len(self.list_sample)
         assert self.num_sample > 0
-        print '# samples: {}'.format(self.num_sample)
+        print '# train dataset samples: {}'.format(self.num_sample)
 
     def _get_sub_batch(self):
         while True:
@@ -163,7 +163,7 @@ class VOCTrainDataset(torchdata.Dataset):
 class VOCValDataset(torchdata.Dataset):
     def __init__(self, opt, max_sample=-1, start_idx=-1, end_idx=-1):
         self.root_dataset = opt.root_dataset
-        self.cropSize = opt.cropSize
+        self.cropSize = opt.valtest_cropSize
 	self.val_batch_size = opt.val_batch_size
 
 	# mean and std, in BGR order
@@ -184,7 +184,7 @@ class VOCValDataset(torchdata.Dataset):
 
         self.num_sample = len(self.list_sample)
         assert self.num_sample > 0
-        print('# samples: {}'.format(self.num_sample))
+        print('# val dataset samples: {}'.format(self.num_sample))
 
     def _get_sub_batch(self):
         while True:
@@ -247,13 +247,13 @@ class VOCValDataset(torchdata.Dataset):
         return output
 
     def __len__(self):
-        return self.num_sample
+        return self.num_sample	# as a consequence, val dataloader must be initialized for every evaluation
 
 
 class VOCTestDataset(torchdata.Dataset):
     def __init__(self, opt, max_sample=-1):
         self.root_dataset = opt.root_dataset
-        self.cropSize = opt.cropSize
+        self.cropSize = opt.valtest_cropSize
 
         # mean and std, in BGR order
         self.img_transform = transforms.Compose([ transforms.Normalize(mean=[104.008, 116.669, 122.675], std=[1., 1., 1.]) ])
@@ -265,7 +265,7 @@ class VOCTestDataset(torchdata.Dataset):
             self.list_sample = self.list_sample[0:max_sample]
         self.num_sample = len(self.list_sample)
         assert self.num_sample > 0
-        print('# samples: {}'.format(self.num_sample))
+        print('# test dataset samples: {}'.format(self.num_sample))
 
     def __getitem__(self, index):
         this_record = self.list_sample[index]
