@@ -110,3 +110,5 @@ trainingResults/*
 *.pth
 *.pkl
 tmp
+
+*.log

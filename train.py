@@ -1,5 +1,5 @@
 # System libs
-import os
+import os, sys
 import time, datetime
 # import math
 import random
@@ -11,7 +11,7 @@ import torch.nn as nn
 # Our libs
 from data.voc.VOCDataset import VOCTrainDataset, VOCValDataset
 from networks import VGGModelBuilder, ResNetModelBuilder, SegmentationModule
-from utils import AverageMeter, accuracy, intersectionAndUnion
+from utils import AverageMeter, accuracy, intersectionAndUnion, Logger
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
 import lib.utils.data as torchdata
@@ -216,7 +216,7 @@ def main(args):
     else:
         segmentation_module = SegmentationModule(
             net_encoder, net_decoder, crit)
-    print segmentation_module
+    print(segmentation_module)
 
     # Dataset and Loader
     dataset_train = VOCTrainDataset(args, batch_per_gpu=args.batch_size_per_gpu)
@@ -229,7 +229,7 @@ def main(args):
         drop_last=True,
         pin_memory=True)
 
-    print('1 training epoch = {} iters'.format(args.epoch_iters))
+    print('[{}] 1 training epoch = {} iters'.format(args.epoch_iters, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     # create loader iterator
     iterator_train = iter(loader_train)
@@ -277,8 +277,7 @@ def main(args):
         # checkpointing
         checkpoint(nets, history, args, epoch)
 
-    print('Training Done!')
-
+    print('[{}] Training Done!'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
 if __name__ == '__main__':
     assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
@@ -291,11 +290,6 @@ if __name__ == '__main__':
     exec('from '+solver_cfg_name+' import opt')
 
     args = opt()
-
-    print("Input arguments:")
-    for key, val in vars(args).items():
-        print("{:16} {}".format(key, val))
-
     args.batch_size = args.num_gpus * args.batch_size_per_gpu
     args.max_iters = args.epoch_iters * args.num_epoch
     args.running_lr_encoder = args.lr_encoder
@@ -310,7 +304,14 @@ if __name__ == '__main__':
     args.id += '_LR_encoder' + str(args.lr_encoder)
     args.id += '_LR_decoder' + str(args.lr_decoder)
     args.id += '_epoch' + str(args.num_epoch)
+    args.log_file = args.id + '.log'
+    sys.stdout = Logger(args.log_file, sys.stdout)
+    sys.stderr = Logger(args.log_file, sys.stderr)
     print('Model ID: {}'.format(args.id))
+
+    print("[{}] Input arguments:".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    for key, val in vars(args).items():
+        print("{:16} {}".format(key, val))
 
     args.snapshot_prefix = os.path.join(args.snapshot_prefix, args.id)
     if not os.path.isdir(args.snapshot_prefix):
