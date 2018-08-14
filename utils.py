@@ -111,6 +111,7 @@ def intersectionAndUnion(imPred, imLab, numClass, ignore_label):
 
     imPred += 1
     imLab += 1
+    ignore_label += 1
     # Remove classes from unlabeled pixels in gt image.
     # We should not penalize detections in unlabeled portions of the image.
     #print imPred.shape, imLab.shape
