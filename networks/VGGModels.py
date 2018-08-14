@@ -121,7 +121,6 @@ class VGG16_20M(nn.Module):
 		('fc7',nn.Conv2d(1024,1024,1)),\
 		('relu7',nn.ReLU(inplace=True)),\
 		('drop7',nn.Dropout2d(p=0.5)),\
-		('fc8_pascal',nn.Conv2d(1024,21,1)),\
 	 ]))
 
     def forward(self, x, return_feature_maps=False):
@@ -163,13 +162,12 @@ class VGG16_20M(nn.Module):
 		self.model.relu5_1(
 		self.model.conv5_1(x)))))))
 	conv_out.append(x)
-	x = self.model.pool5(
-		self.model.drop7(
+	x = self.model.drop7(
 		self.model.relu7(
 		self.model.fc7(
 		self.model.drop6(
 		self.model.relu6(
-		self.model.fc6(x)))))))
+		self.model.fc6(x))))))
 	conv_out.append(x)
         """x = self.conv1(x); conv_out.append(x);
         x = self.conv2(x); conv_out.append(x);

@@ -44,5 +44,6 @@ class SegmentationModule(SegmentationModuleBase):
             return loss, acc
         else: # inference
             pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu), return_feature_maps=True), segSize=segSize).cpu()
+	    #pred = torch.argmax(pred, dim=1)
             return pred
 

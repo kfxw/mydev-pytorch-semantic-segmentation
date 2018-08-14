@@ -8,7 +8,8 @@ class ModelBuilder():
     def weights_init(self, m):
         classname = m.__class__.__name__
         if classname.find('Conv') != -1:
-            nn.init.kaiming_normal_(m.weight.data)
+            #nn.init.kaiming_normal_(m.weight.data)
+	    nn.init.normal_(m.weight.data, mean=0, std=0.01)
         elif classname.find('BatchNorm') != -1:
             m.weight.data.fill_(1.)
             m.bias.data.fill_(1e-4)
@@ -89,7 +90,7 @@ class C0Bilinear(nn.Module):
         conv5 = conv_out[-1]
         x = self.conv_last(conv5)
 	x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
-        x = nn.functional.softmax(x, dim=1)
+        #x = nn.functional.softmax(x, dim=1)
 
         return x
 
