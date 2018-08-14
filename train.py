@@ -105,23 +105,23 @@ def evaluate(segmentation_module, loader, args):
 
         # calculate accuracy
         acc, pix = accuracy(preds, seg_label, 255)
-        intersection, union, cls_ious, cls_mean_iou = intersectionAndUnion(preds, seg_label, args.num_class, 255)
+        intersection, union = intersectionAndUnion(preds, seg_label, args.num_class, 255)
         acc_meter.update(acc, pix)
         intersection_meter.update(intersection)
         union_meter.update(union)
-	cls_ious_meter.update(cls_ious)
-	cls_mean_iou_meter.update(cls_mean_iou)
-        print('[{}] iter {}, accuracy: {}, mIoU: {}'
-              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, cls_mean_iou))
+	mean_iou = (intersection/(union+1e-10))[union!=0].mean()
+        print('[{}] iter {}, accuracy: {:.5f}, mIoU: {:.5f}'
+              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, mean_iou))
 
-    for i, _iou in enumerate(cls_ious):
+    iou = intersection_meter.sum / (union_meter.sum + 1e-10)
+    for i, _iou in enumerate(iou):
         print('[{}] class [{}], IoU: {}'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, _iou))
 
     print('[{}] [Eval Summary]:'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
-          .format(cls_mean_iou_meter.average(), acc_meter.average()*100))
+          .format(iou.mean(), acc_meter.average()*100))
 
-    return cls_ious_meter.average(), cls_mean_iou_meter.average()
+    return iou, iou.mean()
 
 
 def checkpoint(nets, history, args, epoch_num):
@@ -304,6 +304,7 @@ if __name__ == '__main__':
     args.id += '_LR_encoder' + str(args.lr_encoder)
     args.id += '_LR_decoder' + str(args.lr_decoder)
     args.id += '_epoch' + str(args.num_epoch)
+    args.id += '+' + datetime.datetime.now().strftime("%m%d-%H:%M:%S")	# add time stamp to avoid over writting
     args.log_file = args.id + '.log'
     sys.stdout = Logger(args.log_file, sys.stdout)
     sys.stderr = Logger(args.log_file, sys.stderr)

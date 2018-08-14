@@ -140,13 +140,7 @@ def intersectionAndUnion(imPred, imLab, numClass, ignore_label):
     (area_lab, _) = np.histogram(imLab, bins=numClass, range=(1, numClass))
     area_union = area_pred + area_lab - area_intersection
 
-    # IoU for each class and the mean IoU
-    cls_iou = area_intersection / (area_union + 1e-10)
-    mean_iou = cls_iou.mean(axis=None)
-
-    #print imLab[0,:5,:5], imPred.shape
-
-    return (area_intersection, area_union, cls_iou, mean_iou)
+    return (area_intersection, area_union)
 
 
 class NotSupportedCliException(Exception):

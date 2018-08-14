@@ -31,8 +31,8 @@ class opt():
 		# [str], optimizer, currently SGD only
 		self.optim = 'SGD'
 		# [double], base learning rates, momentum, weight decay
-		self.lr_encoder = 1e-8
-		self.lr_decoder = 1e-7
+		self.lr_encoder = 2e-8
+		self.lr_decoder = 2e-7
 		self.momentum = 0.9
 		self.weight_decay = 5e-4
 		# [double], the power used in lr poly stepping
@@ -42,7 +42,7 @@ class opt():
 		# [int], the number of beginning epoch when resuming from a snapshot (begins from 1)
 		self.start_epoch = 1
 		# [int], iterations of each epoch (irrelevant to batch size)
-		self.epoch_iters = 20#60#1
+		self.epoch_iters = 602
 		# [str], the snapshot are saved at snapshot_prefix+id folder
 		self.snapshot_prefix = './trainingResults/'
 
@@ -50,7 +50,7 @@ class opt():
 		# [int], test the model for every test_epoch_interval epochs
 		self.test_epoch_interval = 1
 		# [int], batch size of validation
-		self.val_batch_size = 4
+		self.val_batch_size = 2
 
 	## dataset settings
 		# [str], dataset name, for display only
@@ -70,7 +70,7 @@ class opt():
 		self.train_cropSize = 321	# 512,328
 		self.valtest_cropSize = 512
 		# [bool], whether to conduct random horizontal flip during training
-		self.random_flip = False #True
+		self.random_flip = True
 		# [bool], whther to apply random resizing during training
 		self.random_scale = False#True
 		# [double], if random_sace is True, belows decide the range of resizing factor

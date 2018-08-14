@@ -72,24 +72,23 @@ def evaluate(segmentation_module, loader, args):
 
         # calculate accuracy
         acc, pix = accuracy(preds, seg_label, 255)
-        intersection, union, cls_ious, cls_mean_iou = intersectionAndUnion(preds, seg_label, args.num_class, 255)
+        intersection, union = intersectionAndUnion(preds, seg_label, args.num_class, 255)
         acc_meter.update(acc, pix)
         intersection_meter.update(intersection)
         union_meter.update(union)
-	cls_ious_meter.update(cls_ious)
-	cls_mean_iou_meter.update(cls_mean_iou)
+	mean_iou = (intersection/union)[union!=0].mean()
         print('[{}] iter {}, accuracy: {}, mIoU: {}'
-              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, cls_mean_iou))
+              .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, mean_iou))
 
-    for i, _iou in enumerate(cls_ious):
-        print('class [{}], IoU: {}'.format(i, _iou))
+    iou = intersection_meter.sum / (union_meter.sum + 1e-10)
+    for i, _iou in enumerate(iou):
+        print('[{}] class [{}], IoU: {}'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, _iou))
 
     print('[Eval Summary]:')
     print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
-          .format(cls_mean_iou_meter.average(), acc_meter.average()*100))
+          .format(iou.mean(), acc_meter.average()*100))
 
-
-    return cls_ious_meter.average(), cls_mean_iou_meter.average()
+    return iou, iou.mean()
 
 (cls_ious, cls_mean_iou) = evaluate(segmentation_module, iterator_val, args)
 print cls_ious, cls_mean_iou
