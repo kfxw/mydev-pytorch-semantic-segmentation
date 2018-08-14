@@ -27,14 +27,23 @@ for key, val in vars(args).items():
 builder = VGGModelBuilder()
 net_encoder = builder.build_encoder(
         arch=args.arch_encoder,
-        weights='../'+args.weights_encoder)
+        weights='../'+args.weights_encoder).eval()
 
 p=net_encoder.state_dict()
-fc6_pytorch = p['model.fc6.weight'].numpy()
+fc6_pytorch = p['model.conv1_1.weight'].numpy()
 
 import caffe
 caffe.set_mode_gpu()
 net = caffe.Net('trainval_vgg_voc.prototxt', 'vgg16_20M.caffemodel', caffe.TEST)
-fc6_caffe = net.params['fc6'][0].data
+fc6_caffe = net.params['conv1_1'][0].data
 print fc6_caffe[0,:2,:,:], fc6_caffe.shape
 print fc6_pytorch[0,:2,:,:], fc6_pytorch.shape
+
+input_tmp = np.random.random((1,3,321,321))
+
+res_pytorch = net_encoder(torch.from_numpy(input_tmp).float())[0].data.numpy()
+net.blobs['data'].reshape(1,3,321,321)
+net.blobs['data'].data[...] = input_tmp
+net.forward()	# caffe must not use cudnn
+res_caffe = net.blobs['fc7'].data
+print (res_pytorch-res_caffe)[0,0,:5,:5], res_caffe[0,0,:5,:5], res_pytorch[0,0,:5,:5]
