@@ -21,11 +21,11 @@ class opt():
 
 		## device related
 		# [int list], id of used gpus, begins from 0
-		self.gpu_id = [3]
+		self.gpu_id = (0,1,2,3)
 		# automatically obtained
 		self.num_gpus = len(self.gpu_id)
 		# [int], total batch size = num_gpu x batch_size_per_gpu
-		self.batch_size_per_gpu = 16
+		self.batch_size_per_gpu = 4
 
 		## optim related
 		# [str], optimizer, currently SGD only

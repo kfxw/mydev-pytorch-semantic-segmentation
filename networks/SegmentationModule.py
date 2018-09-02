@@ -30,20 +30,19 @@ class SegmentationModule(SegmentationModuleBase):
             if self.deep_sup_scale is not None: # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu),
 					 return_feature_maps=True), segSize=segSize)
-		pred = pred.cpu(); pred_deepsup = pred_deepsup.cpu();
             else:
                 pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu),
-					 return_feature_maps=True), segSize=segSize).cpu()
+					 return_feature_maps=True), segSize=segSize)
 
-            loss = self.crit(pred, feed_dict['seg_label'])
+            loss = self.crit(pred, feed_dict['seg_label'].cuda(current_gpu))
             if self.deep_sup_scale is not None:
-                loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
+                loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'].cuda(current_gpu))
                 loss = loss + loss_deepsup * self.deep_sup_scale
 
-            acc = self.pixel_acc(pred, feed_dict['seg_label'], self.crit.ignore_index)
+            acc = self.pixel_acc(pred, feed_dict['seg_label'].cuda(current_gpu), self.crit.ignore_index)
             return loss, acc
         else: # inference
-            pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu), return_feature_maps=True), segSize=segSize).cpu()
+            pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu), return_feature_maps=True), segSize=segSize)
 	    #pred = torch.argmax(pred, dim=1)
             return pred
 

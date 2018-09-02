@@ -31,14 +31,22 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
     # main loop
     tic = time.time()
     for i in range(args.epoch_iters):
-        batch_data = next(iterator)[0]
+
+	if args.num_gpus > 1:
+	    batch_data = []
+	    for _ in range(args.num_gpus):
+		batch_data += next(iterator)
+	else:
+	    batch_data = next(iterator)[0]
         data_time.update(time.time() - tic)
 
         segmentation_module.zero_grad()
 
         # forward pass
         loss, acc = segmentation_module(batch_data)
-        loss = loss/args.batch_size_per_gpu#.mean()
+	if args.num_gpus > 1:
+	    loss = loss.mean()
+        loss = loss/args.batch_size_per_gpu
         acc = acc.mean()
 
         # Backward
@@ -89,7 +97,7 @@ def evaluate(segmentation_module, loader, args):
     segmentation_module.eval()
 
     for i in range(len(loader)):
-	batch_data = next(loader)[0]
+        batch_data = next(loader)[0]
 
         # process data
         seg_label = as_numpy(batch_data['seg_label'])
@@ -109,7 +117,7 @@ def evaluate(segmentation_module, loader, args):
         acc_meter.update(acc, pix)
         intersection_meter.update(intersection)
         union_meter.update(union)
-	mean_iou = (intersection/(union+1e-10))[union!=0].mean()
+        mean_iou = (intersection/(union+1e-10))[union!=0].mean()
         print('[{}] iter {}, accuracy: {:.5f}, mIoU: {:.5f}'
               .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, mean_iou))
 
@@ -148,7 +156,6 @@ def group_weight(module, base_lr):
     group_bn_decay = []
     group_no_decay_double_lr = []
     for m in module.modules():
-	print m
         if isinstance(m, nn.Linear):
             group_decay.append(m.weight)
             if m.bias is not None:
@@ -243,7 +250,7 @@ def main(args):
             device_ids=args.gpu_id)
         # For sync bn
         patch_replication_callback(segmentation_module)
-    segmentation_module.cuda(device = args.gpu_id[0])
+    segmentation_module.cuda()
 
     # Set up optimizers
     nets = (net_encoder, net_decoder, crit)
@@ -265,13 +272,13 @@ def main(args):
             num_workers=1, # MUST be 1 or 0
             drop_last=False)
         iterator_val = iter(loader_val)
-	if  (epoch % args.test_epoch_interval == 0 or epoch == args.num_epoch) and epoch != 1:
-	    (cls_ious, cls_mean_iou) = evaluate(segmentation_module, iterator_val, args)
-	    history['train']['test_ious'].append(cls_ious)
-	    history['train']['test_mean_iou'].append(cls_mean_iou)
-	else:
-	    history['train']['test_ious'].append(-1)	# empty data
-	    history['train']['test_mean_iou'].append(-1)
+        if  (epoch % args.test_epoch_interval == 0 or epoch == args.num_epoch) and epoch != 1:
+            (cls_ious, cls_mean_iou) = evaluate(segmentation_module, iterator_val, args)
+            history['train']['test_ious'].append(cls_ious)
+            history['train']['test_mean_iou'].append(cls_mean_iou)
+        else:
+            history['train']['test_ious'].append(-1)	# empty data
+            history['train']['test_mean_iou'].append(-1)
 
 	# train
         train(segmentation_module, iterator_train, optimizers, history, epoch, args)
