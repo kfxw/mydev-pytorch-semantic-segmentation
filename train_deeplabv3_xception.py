@@ -94,15 +94,11 @@ def evaluate(segmentation_module, loader, args):
     cls_ious_meter = AverageMeter()
     cls_mean_iou_meter = AverageMeter()
 
-    segmentation_module.eval()
+    eval_model = segmentation_module.module
+    eval_model.eval()
 
     for i in range(len(loader)):
-        if args.num_gpus > 1:
-	    batch_data = []
-	    for _ in range(args.num_gpus):
-		batch_data += next(iterator)
-	else:
-	    batch_data = next(iterator)[0]
+	batch_data = next(loader)[0]
 
         # process data
         seg_label = as_numpy(batch_data['seg_label'])
@@ -112,7 +108,7 @@ def evaluate(segmentation_module, loader, args):
             pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
 
             # forward pass
-            pred = segmentation_module(batch_data, segSize=segSize)
+            pred = eval_model(batch_data, segSize=segSize)
             _, preds = torch.max(pred.data.cpu(), dim=1)
             preds = as_numpy(preds.squeeze(0))
 
