@@ -97,7 +97,12 @@ def evaluate(segmentation_module, loader, args):
     segmentation_module.eval()
 
     for i in range(len(loader)):
-        batch_data = next(loader)[0]
+        if args.num_gpus > 1:
+	    batch_data = []
+	    for _ in range(args.num_gpus):
+		batch_data += next(iterator)
+	else:
+	    batch_data = next(iterator)[0]
 
         # process data
         seg_label = as_numpy(batch_data['seg_label'])
