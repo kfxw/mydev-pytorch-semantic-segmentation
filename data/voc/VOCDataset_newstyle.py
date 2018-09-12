@@ -116,7 +116,7 @@ class VOCTrainDataset(torchdata.Dataset):
 	    # NOTE: No RGB to BGR
             #img = img.astype(np.float32)[:, :, ::-1] 
 
-	    # NOTE: No transpose from HxWxC to CxHxW
+	    # NOTE: transpose from HxWxC to CxHxW is done by ToTensor()
             #img = img.transpose(2,0,1)
 
 	    # 6 substract mean and normalize std
@@ -225,7 +225,7 @@ class VOCValDataset(torchdata.Dataset):
             assert(img.shape[1] == segm.shape[1])
 	    # NOTE: NO RGB to BGR
             #img = img.astype(np.float32)[:, :, ::-1] 
-	    # NOTE: transpose from HxWxC to CxHxW
+	    # NOTE: transpose from HxWxC to CxHxW is done by ToTensor()
             #img = img.transpose(2,0,1)
 	    # 4 substract mean and normalize std
             img = self.img_transform(img.copy())
@@ -277,9 +277,15 @@ class VOCTestDataset(torchdata.Dataset):
         #img = img.astype(np.float32)[:, :, ::-1] 
 	#img = img.transpose(2,0,1)
 	img = self.img_transform(img.copy())
+	[_, img_height, img_width] = img.shape
+	h_padSize = self.cropSize - img_height
+	w_padSize = self.cropSize - img_width
+	img = F.pad(img, (0,w_padSize,0,h_padSize,0,0), 'constant', 0)
 
         output = dict()
         output['data'] = img.unsqueeze(0)
+	output['img_name'] = this_record.strip()
+	output['pad_size'] = [h_padSize, w_padSize]
         return output
 
     def __len__(self):
