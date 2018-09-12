@@ -2,16 +2,16 @@ class opt():
 	def __init__(self):
 	## network settings
 		# [str], the name of net
-		self.id = 'deeplabv3_xception_allbn_pnorm'
+		self.id = 'deeplabv3_resnet50_allbn'
 		# [str], arch names for network encoder and decoder
 		#    see networks/ModelBuilder.py for decoder definitions and
 		#    the other files for encoder definitions
-		self.arch_encoder = 'xception'
+		self.arch_encoder = 'resnet50'
 		self.arch_decoder = 'deeplabv3_aspp_bilinear'	# 'deeplabv3_aspp_bilinear_deepsup'
 		# [str/None], pretrained models to initialize the network
 		#    if None, the corresponding layers are randomly initialized
-		self.weights_encoder = 'trainingResults/deeplabv3_xception_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus4_batchSize16_trainCropSize512_LR_encoder1e-08_LR_decoder1e-08_epoch46+0902-14:46:13/encoder_epoch_46.pth'#'xception.pth'#
-		self.weights_decoder = 'trainingResults/deeplabv3_xception_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus4_batchSize16_trainCropSize512_LR_encoder1e-08_LR_decoder1e-08_epoch46+0902-14:46:13/decoder_epoch_46.pth'#
+		self.weights_encoder = 'resnet50-imagenet.pth'#'trainingResults/deeplabv3_xception_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus4_batchSize16_trainCropSize512_LR_encoder1e-08_LR_decoder1e-08_epoch46+0902-14:46:13/encoder_epoch_46.pth' #
+		self.weights_decoder = ''#'trainingResults/deeplabv3_xception_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus4_batchSize16_trainCropSize512_LR_encoder1e-08_LR_decoder1e-08_epoch46+0902-14:46:13/decoder_epoch_46.pth'
 		# [double/None], the weight of deep supervision loss
 		self.deep_sup_scale = None
 		# [int: 8,16,32], decide the overall stride (strides in the last two network stages)
@@ -19,22 +19,22 @@ class opt():
 
 	## training settings
 		# [int], seed for random generators
-		self.seed = 888
+		self.seed = 304
 
 		## device related
 		# [int list], id of used gpus, begins from 0
-		self.gpu_id = [0]
+		self.gpu_id = [1]
 		# automatically obtained
 		self.num_gpus = len(self.gpu_id)
 		# [int], total batch size = num_gpu x batch_size_per_gpu
-		self.batch_size_per_gpu = 2 #12
+		self.batch_size_per_gpu = 24
 
 		## optim related
 		# [str], optimizer, currently SGD only
 		self.optim = 'SGD'
 		# [double], base learning rates, momentum, weight decay
-		self.lr_encoder = 2e-8#1.5e-9 #
-		self.lr_decoder = 2e-8#1.5e-9 #
+		self.lr_encoder = 1e-7#1.5e-9 #
+		self.lr_decoder = 1e-7#1.5e-9 #
 		self.momentum = 0.9
 		self.weight_decay = 5e-4
 		# [double], the power used in lr poly stepping
@@ -65,7 +65,7 @@ class opt():
 		self.train_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_train_aug.txt'#official_trainval.txt
 		self.val_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_val.txt'
 		# [str], file that contain image file names (1 columns)
-		self.test_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_test.txt'#deeplab_val_no_gt.txt
+		self.test_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_test.txt'
 		# [int], image size during training and testing
 		#   during training, images are cropped (or padded to) cropSize
 		#   during testing, cropSize must be larger than image sizes and images are padded
@@ -81,4 +81,4 @@ class opt():
 
 	## display settings
 		# [int], the interval of printing the loss during traning
-		self.display_interval = 1
+		self.display_interval = 20

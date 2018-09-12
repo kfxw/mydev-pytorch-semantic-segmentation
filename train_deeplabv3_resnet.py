@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 # Our libs
 from data.voc.VOCDataset_newstyle import VOCTrainDataset, VOCValDataset
-from networks import XceptionModelBuilder, ResnetModelBuilder, SegmentationModule
+from networks import ResnetModelBuilder, SegmentationModule
 from utils import AverageMeter, accuracy, intersectionAndUnion, Logger
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
@@ -31,11 +31,11 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
     ave_acc = AverageMeter()
 
     segmentation_module.train(True)	# affect BN and dropout
-    #segmentation_module.module.encoder.apply(fix_bn)   # fix encoder's bn
+    #segmentation_module.encoder.apply(fix_bn)   # fix encoder's bn
 
     if args.overall_stride == 8:
-	segmentation_module.module.encoder.apply(fix_bn)   # fix encoder's bn
-        segmentation_module.module.decoder.apply(fix_bn)   # 8s, fix decoder's bn
+	segmentation_module.encoder.apply(fix_bn)   # fix encoder's bn
+	segmentation_module.module.decoder.apply(fix_bn)   # 8s, fix decoder's bn
 
     # main loop
     tic = time.time()
@@ -220,7 +220,7 @@ def adjust_learning_rate(optimizers, cur_iter, args):
 
 def main(args):
     # Network Builders
-    builder = XceptionModelBuilder()
+    builder = ResnetModelBuilder()
     net_encoder = builder.build_encoder(
         arch=args.arch_encoder,
         weights=args.weights_encoder,
@@ -250,7 +250,7 @@ def main(args):
         collate_fn=user_scattered_collate,
         num_workers=1, # MUST be 1 or 0
         drop_last=True,
-        pin_memory=False)
+        pin_memory=True)
 
     print('[{}] 1 training epoch = {} iters'.format(args.epoch_iters, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 

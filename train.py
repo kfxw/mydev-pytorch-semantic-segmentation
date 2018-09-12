@@ -83,8 +83,6 @@ def evaluate(segmentation_module, loader, args):
     acc_meter = AverageMeter()
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
-    cls_ious_meter = AverageMeter()
-    cls_mean_iou_meter = AverageMeter()
 
     segmentation_module.eval()
 

@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 # Our libs
 from data.voc.VOCDataset_newstyle import VOCTrainDataset, VOCValDataset
-from networks import XceptionModelBuilder, ResnetModelBuilder, SegmentationModule
+from networks import XceptionModelBuilder, ResnetModelBuilder, SegmentationModule, XceptionPPoolingModelBuilder
 from utils import AverageMeter, accuracy, intersectionAndUnion, Logger
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
@@ -58,8 +58,10 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
         loss = loss/args.batch_size_per_gpu
         acc = acc.mean()
 
+	print 'before back'
         # Backward
         loss.backward()
+	print 'after back'
         for optimizer in optimizers:
             optimizer.step()
 
@@ -158,16 +160,16 @@ def checkpoint(nets, history, args, epoch_num):
                '{}/decoder_{}'.format(args.snapshot_prefix, suffix_latest))
 
 
-def group_weight(module, base_lr):
+def group_weight(module, base_lr, base_decay=-1):
     group_decay = []
     group_bn_decay = []
     group_no_decay_double_lr = []
-    for m in module.modules():
+    for name, m in module.named_modules():
         if isinstance(m, nn.Linear):
             group_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay_double_lr.append(m.bias)
-        elif isinstance(m, nn.modules.conv._ConvNd):
+        elif isinstance(m, nn.modules.conv._ConvNd) and (name.find('pooling_conv_p1') + name.find('pooling_conv_p2') == -2):
             group_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay_double_lr.append(m.bias)
@@ -176,23 +178,80 @@ def group_weight(module, base_lr):
                 group_bn_decay.append(m.weight)
             if m.bias is not None:
                 group_bn_decay.append(m.bias)
+    if base_decay != -1:
+	# for p pooling module
+	# pool1
+	group_pool1_conv = [module.pool1.pooling_conv_p1.weight, module.pool1.pooling_conv_p2.weight]
+	dict_pool1_conv = dict(params=group_pool1_conv, lr=base_lr*1, weight_decay=base_decay*1)
+	group_pool1_relu = [module.pool1.pooling_relu_p1.weight]
+	dict_pool1_relu = dict(params=group_pool1_relu, lr=base_lr*100, weight_decay=0)
+	group_pool1_bias = [module.pool1.pooling_conv_p2.bias]
+	dict_pool1_bias = dict(params=group_pool1_bias, lr=base_lr*180, weight_decay=0)
+	# block1
+	group_block1_conv = [module.block1.rep[-1].pooling_conv_p1.weight, module.block1.rep[-1].pooling_conv_p2.weight]
+	dict_block1_conv = dict(params=group_block1_conv, lr=base_lr*1, weight_decay=base_decay*1)
+	group_block1_relu = [module.block1.rep[-1].pooling_relu_p1.weight]
+	dict_block1_relu = dict(params=group_block1_relu, lr=base_lr*100, weight_decay=0)
+	group_block1_bias = [module.block1.rep[-1].pooling_conv_p2.bias]
+	dict_block1_bias = dict(params=group_block1_bias, lr=base_lr*180, weight_decay=0)
+	# block2
+	group_block2_conv = [module.block2.rep[-1].pooling_conv_p1.weight, module.block2.rep[-1].pooling_conv_p2.weight]
+	dict_block2_conv = dict(params=group_block2_conv, lr=base_lr*1, weight_decay=base_decay*1)
+	group_block2_relu = [module.block2.rep[-1].pooling_relu_p1.weight]
+	dict_block2_relu = dict(params=group_block2_relu, lr=base_lr*100, weight_decay=0)
+	group_block2_bias = [module.block2.rep[-1].pooling_conv_p2.bias]
+	dict_block2_bias = dict(params=group_block2_bias, lr=base_lr*180, weight_decay=0)
+	# block3
+	group_block3_conv = [module.block3.rep[-1].pooling_conv_p1.weight, module.block3.rep[-1].pooling_conv_p2.weight]
+	dict_block3_conv = dict(params=group_block3_conv, lr=base_lr*1, weight_decay=base_decay*1)
+	group_block3_relu = [module.block3.rep[-1].pooling_relu_p1.weight]
+	dict_block3_relu = dict(params=group_block3_relu, lr=base_lr*100, weight_decay=0)
+	group_block3_bias = [module.block3.rep[-1].pooling_conv_p2.bias]
+	dict_block3_bias = dict(params=group_block3_bias, lr=base_lr*180, weight_decay=0)
+	# block12
+	group_block12_conv = [module.block12.rep[-1].pooling_conv_p1.weight, module.block12.rep[-1].pooling_conv_p2.weight]
+	dict_block12_conv = dict(params=group_block12_conv, lr=base_lr*1, weight_decay=base_decay*1)
+	group_block12_relu = [module.block12.rep[-1].pooling_relu_p1.weight]
+	dict_block12_relu = dict(params=group_block12_relu, lr=base_lr*100, weight_decay=0)
+	group_block12_bias = [module.block12.rep[-1].pooling_conv_p2.bias]
+	dict_block12_bias = dict(params=group_block12_bias, lr=base_lr*180, weight_decay=0)
+	
+	assert len(list(module.parameters())) == ( len(group_decay) + len(group_bn_decay) + len(group_no_decay_double_lr) \
+						+ len(group_pool1_conv) + len(group_pool1_relu) + len(group_pool1_bias) \
+						+ len(group_block1_conv) + len(group_block1_relu) + len(group_block1_bias) \
+						+ len(group_block2_conv) + len(group_block2_relu) + len(group_block2_bias) \
+						+ len(group_block3_conv) + len(group_block3_relu) + len(group_block3_bias) \
+						+ len(group_block12_conv) + len(group_block12_relu) + len(group_block12_bias) )
+	bn_dict = dict()
+	if args.overall_stride == 16:
+	    bn_dict = dict(params=group_bn_decay, weight_decay=.9997)
+	elif args.overall_stride == 8:
+	    bn_dict = dict(params=group_bn_decay, weight_decay=0, lr=0)
+	 
+	groups = [dict(params=group_decay), bn_dict, dict(params=group_no_decay_double_lr, weight_decay=.0, lr=base_lr*2), \
+		dict_pool1_conv, dict_pool1_relu, dict_pool1_bias, \
+		dict_block1_conv, dict_block1_relu, dict_block1_bias, \
+		dict_block2_conv, dict_block2_relu, dict_block2_bias, \
+		dict_block3_conv, dict_block3_relu, dict_block3_bias, \
+		dict_block12_conv, dict_block12_relu, dict_block12_bias]
 
-    assert len(list(module.parameters())) == len(group_decay) + len(group_bn_decay) + len(group_no_decay_double_lr)
-    
-    bn_dict = dict()
-    if args.overall_stride == 16:
-	bn_dict = dict(params=group_bn_decay, weight_decay=.9997)
-    elif args.overall_stride == 8:
-	bn_dict = dict(params=group_bn_decay, weight_decay=0, lr=0)
-     
-    groups = [dict(params=group_decay), bn_dict, dict(params=group_no_decay_double_lr, weight_decay=.0, lr=base_lr*2)]
+    else:
+	assert len(list(module.parameters())) == len(group_decay) + len(group_bn_decay) + len(group_no_decay_double_lr)
+
+	bn_dict = dict()
+	if args.overall_stride == 16:
+	    bn_dict = dict(params=group_bn_decay, weight_decay=.9997)
+	elif args.overall_stride == 8:
+	    bn_dict = dict(params=group_bn_decay, weight_decay=0, lr=0)
+	 
+	groups = [dict(params=group_decay), bn_dict, dict(params=group_no_decay_double_lr, weight_decay=.0, lr=base_lr*2)]
     return groups
 
 
 def create_optimizers(nets, args):
     (net_encoder, net_decoder, crit) = nets
     optimizer_encoder = torch.optim.SGD(
-        group_weight(net_encoder, args.lr_encoder),
+        group_weight(net_encoder, args.lr_encoder, args.weight_decay),
         lr=args.lr_encoder,
         momentum=args.momentum,
         weight_decay=args.weight_decay)
@@ -220,7 +279,7 @@ def adjust_learning_rate(optimizers, cur_iter, args):
 
 def main(args):
     # Network Builders
-    builder = XceptionModelBuilder()
+    builder = XceptionPPoolingModelBuilder()  # XceptionModelBuilder()
     net_encoder = builder.build_encoder(
         arch=args.arch_encoder,
         weights=args.weights_encoder,
