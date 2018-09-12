@@ -3,27 +3,53 @@ import sys
 import torch
 import torch.nn as nn
 import math
+import torchvision
+from .ModelBuilder import ModelBuilder
 from lib.nn import SynchronizedBatchNorm2d
 
+"""
 try:
     from urllib import urlretrieve
 except ImportError:
     from urllib.request import urlretrieve
 
-
 __all__ = ['ResNet', 'resnet50', 'resnet101'] # resnet101 is coming soon!
+"""
 
 
-model_urls = {
-    'resnet50': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet50-imagenet.pth',
-    'resnet101': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet101-imagenet.pth'
-}
+#model_urls = {
+#    'resnet50': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet50-imagenet.pth',
+#    'resnet101': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet101-imagenet.pth'
+#}
 
+class ResnetModelBuilder(ModelBuilder):
 
-def conv3x3(in_planes, out_planes, stride=1):
-    "3x3 convolution with padding"
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+    def build_encoder(self, arch='resnet50', weights='', overall_stride=32):
+        pretrained = True if len(weights) == 0 else False
+        if arch == 'resnet50':
+            net_encoder = ResNet(Bottleneck, [3, 4, 6, 3], overall_stride=overall_stride)
+        elif arch == 'resnet101':
+            net_encoder = ResNet(Bottleneck, [3, 4, 23, 3], overall_stride=overall_stride)
+        else:
+            raise Exception('Architecture undefined!')
+
+	net_encoder.apply(self.weights_init)
+        if len(weights) > 0:	# use pretrained model
+            net_encoder.load_state_dict(
+                    torch.load(weights, map_location=lambda storage, loc: storage), strict=False)
+        return net_encoder
+
+    # specialized weights initialization
+    def weights_init(self, m):
+        classname = m.__class__.__name__
+	if classname.find('SeparableConv2d') != -1:
+	    nn.init.kaiming_normal_(m.conv1.weight.data)
+	    nn.init.kaiming_normal_(m.pointwise.weight.data)
+        elif classname.find('Conv') != -1:
+            nn.init.kaiming_normal_(m.weight.data)
+        elif classname.find('BatchNorm') != -1:
+            m.weight.data.fill_(1.)
+            m.bias.data.fill_(1e-4)
 
 
 class BasicBlock(nn.Module):
@@ -31,10 +57,10 @@ class BasicBlock(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(BasicBlock, self).__init__()
-        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = SynchronizedBatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = SynchronizedBatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
@@ -61,12 +87,12 @@ class BasicBlock(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, dilation=1):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = SynchronizedBatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
-                               padding=1, bias=False)
+                               padding=dilation, bias=False, dilation=dilation)
         self.bn2 = SynchronizedBatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         self.bn3 = SynchronizedBatchNorm2d(planes * 4)
@@ -99,38 +125,36 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, overall_stride=32):
         self.inplanes = 128
         super(ResNet, self).__init__()
-        self.conv1 = conv3x3(3, 64, stride=2)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = SynchronizedBatchNorm2d(64)
         self.relu1 = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(64, 64)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = SynchronizedBatchNorm2d(64)
         self.relu2 = nn.ReLU(inplace=True)
-        self.conv3 = conv3x3(64, 128)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn3 = SynchronizedBatchNorm2d(128)
         self.relu3 = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+	if overall_stride == 32:
+            self.layer3 = self._make_layer(block, 256, layers[2], stride=2, multi_dilation=1)
+            self.layer4 = self._make_layer(block, 512, layers[3], stride=2, is_multigrid=True, multi_dilation=1)
+	elif overall_stride == 16:
+            self.layer3 = self._make_layer(block, 256, layers[2], stride=2, multi_dilation=1)
+            self.layer4 = self._make_layer(block, 512, layers[3], stride=1, is_multigrid=True, multi_dilation=2)
+	elif overall_stride == 8:
+            self.layer3 = self._make_layer(block, 256, layers[2], stride=1, multi_dilation=2)
+            self.layer4 = self._make_layer(block, 512, layers[3], stride=1, is_multigrid=True, multi_dilation=2)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, SynchronizedBatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1, is_multigrid=False, multi_dilation=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
+	    #
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
@@ -140,27 +164,38 @@ class ResNet(nn.Module):
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+	if is_multigrid == False:
+            for i in range(1, blocks):
+                layers.append(block(self.inplanes, planes, dilation=multi_dilation))
+	else:
+	    dilation_grids = [1,2,4]
+	    assert blocks==3
+	    for i in range(3):
+		layers.append(block(self.inplanes, planes, dilation=dilation_grids[i] * multi_dilation))
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, return_feature_maps=False):
+        conv_out = []
+
         x = self.relu1(self.bn1(self.conv1(x)))
+	conv_out.append(x)
         x = self.relu2(self.bn2(self.conv2(x)))
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.maxpool(x)
+	conv_out.append(x)
 
         x = self.layer1(x)
         x = self.layer2(x)
+	conv_out.append(x)
         x = self.layer3(x)
+	conv_out.append(x)
         x = self.layer4(x)
+	conv_out.append(x)
 
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-
-        return x
+        if return_feature_maps:
+            return conv_out
+        return [x]
 
 '''
 def resnet18(pretrained=False, **kwargs):
@@ -185,7 +220,7 @@ def resnet34(pretrained=False, **kwargs):
     if pretrained:
         model.load_state_dict(load_url(model_urls['resnet34']))
     return model
-'''
+
 
 def resnet50(pretrained=False, **kwargs):
     """Constructs a ResNet-50 model.
@@ -230,3 +265,4 @@ def load_url(url, model_dir='./pretrained', map_location=None):
         sys.stderr.write('Downloading: "{}" to {}\n'.format(url, cached_file))
         urlretrieve(url, cached_file)
     return torch.load(cached_file, map_location=map_location)
+'''

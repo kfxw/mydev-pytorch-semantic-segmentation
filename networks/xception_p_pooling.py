@@ -3,9 +3,10 @@ import torch.nn as nn
 import torchvision
 from .ModelBuilder import ModelBuilder
 from lib.nn import SynchronizedBatchNorm2d
+from lib.ppooling import P_Pooling_Module
 from collections import OrderedDict
 
-class XceptionModelBuilder(ModelBuilder):
+class XceptionPPoolingModelBuilder(ModelBuilder):
 
     def build_encoder(self, arch='xception', weights='', overall_stride=32):
         pretrained = True if len(weights) == 0 else False
@@ -31,6 +32,10 @@ class XceptionModelBuilder(ModelBuilder):
         elif classname.find('BatchNorm') != -1:
             m.weight.data.fill_(1.)
             m.bias.data.fill_(1e-4)
+	# relu_p2 in P_Pooling_module
+	elif hasattr(m, 'pooling_conv_p2') == True:
+	    m.pooling_conv_p2.bias.data.fill_(m.init_bias)
+
 
 class SeparableConv2d(nn.Module):
     def __init__(self,in_channels,out_channels,kernel_size=1,stride=1,padding=0,dilation=1,bias=False):
@@ -46,7 +51,7 @@ class SeparableConv2d(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self,in_filters,out_filters,reps,strides=1,start_with_relu=True,grow_first=True,dilation=1):
+    def __init__(self,in_filters,out_filters,reps,strides=1,start_with_relu=True,grow_first=True,dilation=1,force_use_pool=False,side_branch_scale=1):
         super(Block, self).__init__()
 
         if out_filters != in_filters or strides!=1:
@@ -80,8 +85,8 @@ class Block(nn.Module):
         else:
             rep[0] = nn.ReLU(inplace=False)
 
-        if strides != 1:
-            rep.append(nn.MaxPool2d(3,strides,1))
+        if strides != 1 or force_use_pool == True:
+            rep.append(P_Pooling_Module(out_filters,3,stride=strides,padding=1,side_branch_scale=side_branch_scale))
         self.rep = nn.Sequential(*rep)
 
     def forward(self,inp):
@@ -107,21 +112,22 @@ class Xception(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
 
-        self.conv1 = nn.Conv2d(3, 32, 3,2, 0, bias=False)
+        self.conv1 = nn.Conv2d(3, 32, 3,1, 0, bias=False)
         self.bn1 = SynchronizedBatchNorm2d(32)
+	self.pool1 = P_Pooling_Module(32,3,stride=2,padding=2,side_branch_scale=1)
 
         self.conv2 = nn.Conv2d(32,64,3,bias=False)
         self.bn2 = SynchronizedBatchNorm2d(64)
         #do relu here
 
 	dilation = 1
-        self.block1=Block(64,128,2,2,start_with_relu=False,grow_first=True)	#block(in_dim,out_dim,reps,stride)
-        self.block2=Block(128,256,2,2,start_with_relu=True,grow_first=True)
+        self.block1=Block(64,128,2,2,start_with_relu=False,grow_first=True,side_branch_scale=1)	#block(in_dim,out_dim,reps,stride)
+        self.block2=Block(128,256,2,2,start_with_relu=True,grow_first=True,side_branch_scale=1)
 	if overall_stride == 8:
 	    dilation *= 2
-            self.block3=Block(256,728,2,1,start_with_relu=True,grow_first=True)	# pooling is at end of the block
+            self.block3=Block(256,728,2,1,start_with_relu=True,grow_first=True,force_use_pool=True,side_branch_scale=1)	# pooling is at end of the block
 	else:
-	    self.block3=Block(256,728,2,2,start_with_relu=True,grow_first=True)
+	    self.block3=Block(256,728,2,2,start_with_relu=True,grow_first=True,side_branch_scale=1)
 
         self.block4=Block(728,728,3,1,start_with_relu=True,grow_first=True,dilation=dilation)
         self.block5=Block(728,728,3,1,start_with_relu=True,grow_first=True,dilation=dilation)
@@ -135,9 +141,9 @@ class Xception(nn.Module):
 
 	if overall_stride == 8 or overall_stride == 16:
 	    dilation *= 2
-            self.block12=Block(728,1024,2,1,start_with_relu=True,grow_first=False,dilation=dilation)
+            self.block12=Block(728,1024,2,1,start_with_relu=True,grow_first=False,dilation=dilation,force_use_pool=True,side_branch_scale=1)
 	else:
-	    self.block12=Block(728,1024,2,2,start_with_relu=True,grow_first=False,dilation=dilation)
+	    self.block12=Block(728,1024,2,2,start_with_relu=True,grow_first=False,dilation=dilation,side_branch_scale=1)
 
         self.conv3 = SeparableConv2d(1024,1536,3,1,dilation*2,dilation=dilation*2)	# SeparableConv2d(in_dim,out_dim,kernel,stride,pad), dilation with multi-grid (1,2,4)
         self.bn3 = SynchronizedBatchNorm2d(1536)
@@ -152,12 +158,14 @@ class Xception(nn.Module):
         x = self.conv1(input)
         x = self.bn1(x)
         x = self.relu(x)
+	x = self.pool1(x)	# p pooling
         conv_out.append(x)
 
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.relu(x)
-	conv_out.append(x)
+
+	print x.size()
         
         x = self.block1(x)
 	conv_out.append(x)
@@ -181,7 +189,7 @@ class Xception(nn.Module):
         x = self.conv3(x)
         x = self.bn3(x)
         x = self.relu(x)
-        
+
         x = self.conv4(x)
         x = self.bn4(x)
 	conv_out.append(x)

@@ -59,6 +59,11 @@ class ModelBuilder():
                 num_class=num_class,
                 fc_dim=fc_dim,
                 dilation_rates=(6, 12, 18))
+        elif arch == 'deeplabv3_aspp_bilinear_deepsup':
+            net_decoder = DeeplabV3ASPPBilinearDeepSup(
+                num_class=num_class,
+                fc_dim=fc_dim,
+                dilation_rates=(6, 12, 18))
         else:
             raise Exception('Architecture undefined!')
 
@@ -413,6 +418,107 @@ class DeeplabV3ASPPBilinear(nn.Module):
 	# concat
 	aspp_ave = nn.functional.upsample(aspp_ave, size=input_size[2:], mode='bilinear', align_corners=False)
 	x = torch.cat([aspp_ave, aspp0, aspp1, aspp2, aspp3], dim=1)
+	x = self.cat_projection(x)
+	# decode
+	x = self.decoder_projection(x)
+	# resize and output
+        x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
+        #x = nn.functional.softmax(x, dim=1)
+        return x
+
+# 2018-09-01, deeplab v3 aspp deep sup
+class DeeplabV3ASPPBilinearDeepSup(nn.Module):
+    def __init__(self, num_class=150, fc_dim=4096, dilation_rates=(6, 12, 18)):
+        super(DeeplabV3ASPPBilinear, self).__init__()
+
+	self.aspp0 = nn.Sequential(
+                nn.Conv2d(fc_dim, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		)
+	self.aspp1 = nn.Sequential(
+                nn.Conv2d(fc_dim, fc_dim, kernel_size=3, bias=False,
+			dilation=dilation_rates[0], padding=dilation_rates[0], groups=fc_dim),  # depthwise
+                SynchronizedBatchNorm2d(fc_dim),
+		nn.ReLU(inplace=True),
+                nn.Conv2d(fc_dim, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		)
+	self.aspp2 = nn.Sequential(
+                nn.Conv2d(fc_dim, fc_dim, kernel_size=3, bias=False, 
+			dilation=dilation_rates[1], padding=dilation_rates[1], groups=fc_dim),
+                SynchronizedBatchNorm2d(fc_dim),
+		nn.ReLU(inplace=True),
+                nn.Conv2d(fc_dim, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		)
+	self.aspp3 = nn.Sequential(
+                nn.Conv2d(fc_dim, fc_dim, kernel_size=3, bias=False, 
+			dilation=dilation_rates[2], padding=dilation_rates[2], groups=fc_dim),
+                SynchronizedBatchNorm2d(fc_dim),
+		nn.ReLU(inplace=True),
+                nn.Conv2d(fc_dim, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		)
+	self.gap = nn.Sequential(
+		nn.AdaptiveAvgPool2d(1),
+                nn.Conv2d(fc_dim, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		)
+
+	self.cat_projection = nn.Sequential(
+                nn.Conv2d(1280, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(308),
+		nn.ReLU(inplace=True),
+		nn.Dropout2d(p=0.5)
+		)
+
+	self.deepsup_projection = nn.Sequential(
+                nn.Conv2d(1024, 52, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(52),
+		nn.ReLU(inplace=True),
+		)
+
+	self.decoder_projection = nn.Sequential(
+                nn.Conv2d(308, 308, kernel_size=3, bias=False, padding=1, groups=308),
+                SynchronizedBatchNorm2d(308),
+		nn.ReLU(inplace=True),
+		nn.Conv2d(308, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		nn.Conv2d(256, 256, kernel_size=3, bias=False, padding=1, groups=256),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		nn.Conv2d(256, 256, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(256),
+		nn.ReLU(inplace=True),
+		nn.Conv2d(256, num_class, kernel_size=1, bias=True),
+		)
+
+
+    def forward(self, conv_out, segSize=None):
+        x = conv_out[-1]
+        input_size = x.size()
+	deepsup = conv_out[-2]
+	deepsup_size = deepsup.size()
+
+	# aspp
+	aspp_ave = self.gap(x)
+	aspp0 = self.aspp0(x)
+	aspp1 = self.aspp1(x)
+	aspp2 = self.aspp2(x)
+	aspp3 = self.aspp3(x)
+
+	# concat
+	aspp_ave = nn.functional.upsample(aspp_ave, size=input_size[2:], mode='bilinear', align_corners=False)
+	x = torch.cat([aspp_ave, aspp0, aspp1, aspp2, aspp3], dim=1)
+	# deep supervision projection and concat
+	deepsup = self.deepsup_projection(deepsup)
+	x = torch.cat([deepsup, x], dim=1)
 	x = self.cat_projection(x)
 	# decode
 	x = self.decoder_projection(x)
