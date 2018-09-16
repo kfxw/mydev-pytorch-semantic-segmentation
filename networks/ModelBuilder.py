@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from lib.nn import SynchronizedBatchNorm2d
+import pdb
 
 class ModelBuilder():
     # custom weights initialization
@@ -385,7 +386,7 @@ class DeeplabV3ASPPBilinear(nn.Module):
                 nn.Conv2d(1280, 308, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(308),
 		nn.ReLU(inplace=True),
-		nn.Dropout2d(p=0.5)
+		#nn.Dropout2d(p=0.5)
 		)
 
 	self.decoder_projection = nn.Sequential(
@@ -424,6 +425,7 @@ class DeeplabV3ASPPBilinear(nn.Module):
 	# resize and output
         x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
         #x = nn.functional.softmax(x, dim=1)
+
         return x
 
 # 2018-09-01, deeplab v3 aspp deep sup

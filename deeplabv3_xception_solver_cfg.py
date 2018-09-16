@@ -10,8 +10,8 @@ class opt():
 		self.arch_decoder = 'deeplabv3_aspp_bilinear'	# 'deeplabv3_aspp_bilinear_deepsup'
 		# [str/None], pretrained models to initialize the network
 		#    if None, the corresponding layers are randomly initialized
-		self.weights_encoder = 'trainingResults/deeplabv3_xception_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus4_batchSize16_trainCropSize512_LR_encoder1e-08_LR_decoder1e-08_epoch46+0902-14:46:13/encoder_epoch_46.pth'#'xception.pth'#
-		self.weights_decoder = 'trainingResults/deeplabv3_xception_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus4_batchSize16_trainCropSize512_LR_encoder1e-08_LR_decoder1e-08_epoch46+0902-14:46:13/decoder_epoch_46.pth'#
+		self.weights_encoder = 'xception.pth'#'trainingResults/deeplabv3_xception_allbn_pnorm_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus1_batchSize24_trainCropSize504_LR_encoder1e-07_LR_decoder1e-07_epoch46+0912-10:25:47/encoder_epoch_46.pth'
+		self.weights_decoder = ''#'trainingResults/deeplabv3_xception_allbn_pnorm_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus1_batchSize24_trainCropSize504_LR_encoder1e-07_LR_decoder1e-07_epoch46+0912-10:25:47/decoder_epoch_46.pth'
 		# [double/None], the weight of deep supervision loss
 		self.deep_sup_scale = None
 		# [int: 8,16,32], decide the overall stride (strides in the last two network stages)
@@ -27,14 +27,14 @@ class opt():
 		# automatically obtained
 		self.num_gpus = len(self.gpu_id)
 		# [int], total batch size = num_gpu x batch_size_per_gpu
-		self.batch_size_per_gpu = 2 #12
+		self.batch_size_per_gpu = 16
 
 		## optim related
 		# [str], optimizer, currently SGD only
 		self.optim = 'SGD'
 		# [double], base learning rates, momentum, weight decay
-		self.lr_encoder = 2e-8#1.5e-9 #
-		self.lr_decoder = 2e-8#1.5e-9 #
+		self.lr_encoder = 1e-7#2e-8##1.5e-9 #
+		self.lr_decoder = 1e-7#2e-8##1.5e-9 #
 		self.momentum = 0.9
 		self.weight_decay = 5e-4
 		# [double], the power used in lr poly stepping
@@ -60,12 +60,12 @@ class opt():
 		# [int], number of output classes
 		self.num_class = 21
 		# [str], root path of dataset 
-		self.root_dataset = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012'
+		self.root_dataset = '/data/zhenwei/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012'
 		# [str], file that contain image/gt file names (2 columns divied by a space)
-		self.train_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_train_aug.txt'#official_trainval.txt
-		self.val_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_val.txt'
+		self.train_list_file = '/data/zhenwei/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/official_trainval.txt'#/deeplab_train_aug.txt
+		self.val_list_file = '/data/zhenwei/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_val.txt'
 		# [str], file that contain image file names (1 columns)
-		self.test_list_file = '/home/kfxw/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_test.txt'#deeplab_val_no_gt.txt
+		self.test_list_file = '/data/zhenwei/Development/data/VOC/VOC2012-May-11-data/VOCdevkit/VOC2012/ImageSets/Segmentation/deeplab_test.txt'#deeplab_val_no_gt.txt
 		# [int], image size during training and testing
 		#   during training, images are cropped (or padded to) cropSize
 		#   during testing, cropSize must be larger than image sizes and images are padded

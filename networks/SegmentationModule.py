@@ -1,3 +1,4 @@
+import pdb
 import torch
 import torch.nn as nn
 import torchvision
@@ -33,7 +34,6 @@ class SegmentationModule(SegmentationModuleBase):
             else:
                 pred = self.decoder(self.encoder(feed_dict['data'].cuda(current_gpu),
 					 return_feature_maps=True), segSize=segSize)
-
             loss = self.crit(pred, feed_dict['seg_label'].cuda(current_gpu))
             if self.deep_sup_scale is not None:
                 loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'].cuda(current_gpu))

@@ -14,12 +14,15 @@ class P_Pooling_Module(torch.nn.Module):
 		self.init_bias = init_bias
 		self.scale = side_branch_scale
 
+		#self.max_pooling = nn.MaxPool2d(kernel_size, stride, 1)
+
 	def forward(self, bottom, side_branch_scale=1):
-		bottom_1 = bottom * self.scale
-		bottom_1.detach()
+		bottom_1 = bottom.clone() * self.scale
 		bottom_1 = self.pooling_conv_p1(bottom_1)
 		bottom_1 = self.pooling_relu_p1(bottom_1)
 		bottom_1 = self.pooling_conv_p2(bottom_1)
 		bottom_1 = self.pooling_relu_p2(bottom_1)
+		bottom_1.detach()
+		res = self.pooling(bottom, bottom_1)
 
-		return self.pooling(bottom, bottom_1)
+		return res

@@ -1,3 +1,4 @@
+import pdb
 # System libs
 import os, sys
 import time, datetime
@@ -34,8 +35,8 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
     #segmentation_module.module.encoder.apply(fix_bn)   # fix encoder's bn
 
     if args.overall_stride == 8:
-	segmentation_module.module.encoder.apply(fix_bn)   # fix encoder's bn
-        segmentation_module.module.decoder.apply(fix_bn)   # 8s, fix decoder's bn
+	segmentation_module.encoder.apply(fix_bn)   # fix encoder's bn
+        segmentation_module.decoder.apply(fix_bn)   # 8s, fix decoder's bn
 
     # main loop
     tic = time.time()
@@ -52,16 +53,14 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
         segmentation_module.zero_grad()
 
         # forward pass
-        loss, acc = segmentation_module(batch_data)
+        loss, acc = segmentation_module(batch_data)	#segmentation_module.encoder.block12.rep.5.running_mean
 	if args.num_gpus > 1:
 	    loss = loss.mean()
         loss = loss/args.batch_size_per_gpu
         acc = acc.mean()
 
-	print 'before back'
         # Backward
         loss.backward()
-	print 'after back'
         for optimizer in optimizers:
             optimizer.step()
 

@@ -1,3 +1,4 @@
+import pdb
 import torch
 import torch.nn as nn
 import torchvision
@@ -98,7 +99,7 @@ class Block(nn.Module):
         else:
             skip = inp
 
-        x+=skip
+        x += skip
         return x
 
 
@@ -165,8 +166,6 @@ class Xception(nn.Module):
         x = self.bn2(x)
         x = self.relu(x)
 
-	print x.size()
-        
         x = self.block1(x)
 	conv_out.append(x)
 
