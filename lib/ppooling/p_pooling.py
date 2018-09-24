@@ -11,8 +11,8 @@ def cunnex(strFunction):
 
 DensePNormForward = """
 extern "C" __global__ void DensePNormForward(const int nthreads,
-	 const float* padded_bottom_data, float* top_data,
-	 const float* p_data, double* numerator_data, double* denominator_data,
+	 const double* padded_bottom_data, double* top_data,
+	 const double* p_data, double* numerator_data, double* denominator_data,
 	 const int bottom_num, const int channels,
 	 const int padded_bottom_height_, const int padded_bottom_width_,
 	 const int pooled_height_, const int pooled_width_,
@@ -38,8 +38,8 @@ extern "C" __global__ void DensePNormForward(const int nthreads,
 	int bottom_idx = h * padded_bottom_width_ + w;
 
 	double x_pow_p = 0;
-	double a = (double)padded_bottom_data[bottom_idx];
-	double b = (double)p_data[top_idx];
+	double a = static_cast<double>(padded_bottom_data[bottom_idx]);
+	double b = static_cast<double>(p_data[top_idx]);
 	if (abs(b - 1) < 1e-34)
 	  x_pow_p = a;
 	else {
@@ -56,12 +56,12 @@ extern "C" __global__ void DensePNormForward(const int nthreads,
 	  x_pow_p = r * u.d;
 	}
 
-	double x_pow_p_plus1 = x_pow_p * padded_bottom_data[bottom_idx];
+	double x_pow_p_plus1 = x_pow_p * static_cast<double>(padded_bottom_data[bottom_idx]);
 	tmp_numerator += x_pow_p_plus1;
 	tmp_denominator += x_pow_p;
       }
     }
-    top_data[top_idx] = (float)(tmp_numerator / tmp_denominator);
+    top_data[top_idx] = tmp_numerator / tmp_denominator;
     numerator_data[top_idx] = tmp_numerator;
     denominator_data[top_idx] = tmp_denominator;
 }
@@ -69,8 +69,8 @@ extern "C" __global__ void DensePNormForward(const int nthreads,
 
 DensePNormBackward_P = """
 extern "C" __global__ void DensePNormBackward_P(const int nthreads,
-	 const float* padded_bottom_data, const float* top_data, const float* top_diff,
-	 const float* p_data, float* p_diff,
+	 const double* padded_bottom_data, const double* top_data, const double* top_diff,
+	 const double* p_data, double* p_diff,
 	 const double* numerator_data, const double* denominator_data,
 	 const int bottom_num, const int channels,
 	 const int padded_bottom_height_, const int padded_bottom_width_,
@@ -98,8 +98,8 @@ extern "C" __global__ void DensePNormBackward_P(const int nthreads,
 	int bottom_idx = h * padded_bottom_width_ + w;
 
 	double x_pow_p = 0;
-	double a = (double)padded_bottom_data[bottom_idx];
-	double b = (double)p_data[top_idx];
+	double a = padded_bottom_data[bottom_idx];
+	double b = p_data[top_idx];
 	if (abs(b - 1) < 1e-34)
 	  x_pow_p = a;
 	else {
@@ -116,22 +116,22 @@ extern "C" __global__ void DensePNormBackward_P(const int nthreads,
 	  x_pow_p = r * u.d;
 	}
 
-	double x_pow_p_plus1 = x_pow_p * (double)padded_bottom_data[bottom_idx];
-	float bottom_data_value = padded_bottom_data[bottom_idx]<1e-3 ? 1e-3 : padded_bottom_data[bottom_idx];
+	double x_pow_p_plus1 = x_pow_p * padded_bottom_data[bottom_idx];
+	double bottom_data_value = padded_bottom_data[bottom_idx]<1e-3 ? 1e-3 : padded_bottom_data[bottom_idx];
 	bottom_data_value = log(bottom_data_value);
 	sum1 += bottom_data_value * x_pow_p_plus1;
 	sum2 += bottom_data_value * x_pow_p;
       }
     }
-    float tmp = (float) ((sum1 - sum2*top_data[top_idx]) / (denominator_data[top_idx]+1e-10));
-    p_diff[top_idx] = top_diff[top_idx] * (float)tmp;
+    double tmp =  ((sum1 - sum2*top_data[top_idx]) / (denominator_data[top_idx]+1e-10));
+    p_diff[top_idx] = top_diff[top_idx] * tmp;
 }
 """
 
 DensePNormBackward_data = """
 extern "C" __global__ void DensePNormBackward_data(const int nthreads,
-	 const float* padded_bottom_data, float* bottom_diff, const float* top_data, const float* top_diff,
-	 const float* p_data,
+	 const double* padded_bottom_data, double* bottom_diff, const double* top_data, const double* top_diff,
+	 const double* p_data,
 	 const double* numerator_data, const double* denominator_data,
 	 const int bottom_num, const int channels,
 	 const int bottom_height_, const int bottom_width_,
@@ -203,8 +203,8 @@ extern "C" __global__ void DensePNormBackward_data(const int nthreads,
 		}
 
 		int ori_bottom_idx = (h-pad_h_) * bottom_width_ + (w-pad_w_);
-		float tmp = ((p_data[top_idx]+1) * x_pow_p - p_data[top_idx] * x_pow_p_minus1 * top_data[top_idx]) / (denominator_data[top_idx]+1e-10);
-		bottom_diff[ori_bottom_idx] += top_diff[top_idx] * (float)tmp;
+		double tmp = ((p_data[top_idx]+1) * x_pow_p - p_data[top_idx] * x_pow_p_minus1 * top_data[top_idx]) / (denominator_data[top_idx]+1e-10);
+		bottom_diff[ori_bottom_idx] += top_diff[top_idx] * tmp;
 	}
       }
     }
@@ -222,6 +222,7 @@ class P_Pooling(torch.autograd.Function):
 
 	def forward(self, bottom_0, bottom_1):
 
+		print bottom_0
 		assert(bottom_0.is_contiguous() == True)
 		assert(bottom_1.is_contiguous() == True)
 		assert(bottom_0.size()[2]==bottom_0.size()[3])	# only handle square feature maps
