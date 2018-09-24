@@ -270,6 +270,7 @@ class ADE20KTestDataset(torchdata.Dataset):
 	assert(img.ndim == 3)
 	img = self.img_transform(img.copy())
 	[_, img_height, img_width] = img.shape
+	# keep image to constant cropSize (for small images) or use their original size (for large images)
 	if max([img_height, img_width]) <= self.cropSize:
 	    h_padSize = self.cropSize - img_height
 	    w_padSize = self.cropSize - img_width
