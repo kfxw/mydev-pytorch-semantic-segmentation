@@ -54,10 +54,10 @@ print net.blobs['p_map'].diff
 print '------------------------'
 """
 
-data = torch.from_numpy(np.array([1,2,3,4]).reshape(1,1,2,2).astype(float)).cuda()-2
-data = torch.from_numpy(np.array([0,1,2,3]).reshape(1,1,2,2).astype(float)).cuda()
+data = torch.from_numpy(np.array([1,2,3,4]).reshape(1,1,2,2).astype(float)).cuda() - 2
+#data = torch.from_numpy(np.array([0,1,2,3]).reshape(1,1,2,2).astype(float)).cuda()
 p_map = torch.from_numpy(np.zeros([1,1,3,3]).astype(float)).cuda()
-p_map[...] = 2
+p_map[...] = 2.0
 
 data.requires_grad_()
 p_map.requires_grad_()

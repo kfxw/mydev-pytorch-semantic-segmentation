@@ -222,7 +222,7 @@ class P_Pooling(torch.autograd.Function):
 
 	def forward(self, bottom_0, bottom_1):
 
-		print bottom_0
+		bottom_1 = bottom_1.to(dtype=torch.float64)
 		assert(bottom_0.is_contiguous() == True)
 		assert(bottom_1.is_contiguous() == True)
 		assert(bottom_0.size()[2]==bottom_0.size()[3])	# only handle square feature maps
@@ -232,6 +232,8 @@ class P_Pooling(torch.autograd.Function):
 		bottom_0_min = bottom_0.min(keepdim=True,dim=3)[0].min(keepdim=True,dim=2)[0]		# find min values of each channel
 		bottom_0_min = -(F.threshold(-bottom_0_min, 0, 0, inplace=False))			# ignore positive mins
 		bottom_0_non_negative = bottom_0 - bottom_0_min						# shift input data
+		bottom_0_non_negative = bottom_0_non_negative.to(torch.float64)
+		bottom_0_min = bottom_0_min.to(torch.float64)
 
 		num = bottom_0_non_negative.size()[0]
 		channels = bottom_0_non_negative.size()[1]
@@ -244,8 +246,11 @@ class P_Pooling(torch.autograd.Function):
 			if (pooled_size - 1) * self.stride >= bottom_size + self.pad :
 				pooled_size -= 1
 			assert(((pooled_size - 1) * self.stride) < (bottom_size + self.pad));
-		top = bottom_0_non_negative.new_zeros((num, channels, pooled_size, pooled_size))
+		top = bottom_0_non_negative.new_zeros((num, channels, pooled_size, pooled_size), dtype=torch.float64)
+
 		assert(pooled_size==bottom_1.size()[2]), "{} vs. {}".format(pooled_size, bottom_1.size()[2])
+
+		#print top, bottom_0_non_negative
 
 		# preprocess
 		# init numerator and denominator
@@ -273,9 +278,10 @@ class P_Pooling(torch.autograd.Function):
 		else:
 			raise NotImplementedError()
 
-		return top + bottom_0_min
+		return (top + bottom_0_min).to(torch.float32)
 
 	def backward(self, top_diff):
+		top_diff = top_diff.to(dtype=torch.float64)
 		[bottom_1, top, padded_input, numerator_data, denominator_data] = self.saved
 		num = padded_input.size()[0]
 		channels = padded_input.size()[1]
@@ -285,8 +291,8 @@ class P_Pooling(torch.autograd.Function):
 		assert(top_diff.is_contiguous() == True)
 
 		bottom_size = padded_input_size - 2*self.pad
-		bottom_0_diff = padded_input.new_zeros((num, channels, bottom_size, bottom_size))
-		bottom_1_diff = bottom_1.new_zeros(bottom_1.size())
+		bottom_0_diff = padded_input.new_zeros((num, channels, bottom_size, bottom_size), dtype=torch.float64)
+		bottom_1_diff = bottom_1.new_zeros(bottom_1.size(), dtype=torch.float64)
 
 		if bottom_1.is_cuda == True:
 			class Stream:
@@ -320,4 +326,4 @@ class P_Pooling(torch.autograd.Function):
 		else:
 			raise NotImplementedError()
 
-		return bottom_0_diff, bottom_1_diff
+		return bottom_0_diff.to(torch.float32), bottom_1_diff.to(torch.float32)
