@@ -22,7 +22,7 @@ class P_Pooling_Module(torch.nn.Module):
 		bottom_1 = self.pooling_relu_p1(bottom_1)
 		bottom_1 = self.pooling_conv_p2(bottom_1)
 		bottom_1 = self.pooling_relu_p2(bottom_1)
-		bottom_1.detach()
+		bottom_1 = bottom_1.detach()
 		res = self.pooling(bottom, bottom_1)
 
 		return res
