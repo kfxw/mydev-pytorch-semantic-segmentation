@@ -14,8 +14,6 @@ class ModelBuilder():
         elif classname.find('BatchNorm') != -1:
             m.weight.data.fill_(1.)
             m.bias.data.fill_(1e-4)
-        #elif classname.find('Linear') != -1:
-        #    m.weight.data.normal_(0.0, 0.0001)
 
     def build_decoder(self, arch='ppm_bilinear_deepsup',
                       fc_dim=512, num_class=150,
@@ -424,7 +422,6 @@ class DeeplabV3ASPPBilinear(nn.Module):
 	x = self.decoder_projection(x)
 	# resize and output
         x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
-        #x = nn.functional.softmax(x, dim=1)
 
         return x
 
@@ -526,5 +523,4 @@ class DeeplabV3ASPPBilinearDeepSup(nn.Module):
 	x = self.decoder_projection(x)
 	# resize and output
         x = nn.functional.upsample(x, size=segSize, mode='bilinear', align_corners=False)
-        #x = nn.functional.softmax(x, dim=1)
         return x

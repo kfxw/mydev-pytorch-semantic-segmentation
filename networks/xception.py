@@ -46,7 +46,7 @@ class SeparableConv2d(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self,in_filters,out_filters,reps,strides=1,start_with_relu=True,grow_first=True,dilation=1):
+    def __init__(self,in_filters,out_filters,reps,strides=1,start_with_relu=True,grow_first=True,dilation=1,force_pooling=False):
         super(Block, self).__init__()
 
         if out_filters != in_filters or strides!=1:
@@ -80,7 +80,7 @@ class Block(nn.Module):
         else:
             rep[0] = nn.ReLU(inplace=False)
 
-        if strides != 1:
+        if strides != 1 or force_pooling == True:
             rep.append(nn.MaxPool2d(3,strides,1))
         self.rep = nn.Sequential(*rep)
 

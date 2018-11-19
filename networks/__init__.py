@@ -4,3 +4,8 @@ from .resnet import ResnetModelBuilder
 from .SegmentationModule import SegmentationModule
 from .xception import XceptionModelBuilder
 from .xception_p_pooling import XceptionPPoolingModelBuilder
+from .xception_p_pooling_skip_pool import XceptionPPoolingModelBuilder_skip_pool
+from .xception_p_pooling_front_pool import XceptionPPoolingModelBuilder_front_pool
+from .xception_p_pooling_back_pool import XceptionPPoolingModelBuilder_back_pool
+from .xception_p_pooling_only_skip_pool import XceptionPPoolingModelBuilder_only_skip_pool
+from .xception_p_pooling_next_relu_pool import XceptionPPoolingModelBuilder_next_relu_pool
