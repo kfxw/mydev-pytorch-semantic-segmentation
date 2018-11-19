@@ -3,6 +3,7 @@ import cupy
 import torch
 import math
 import torch.nn.functional as F
+import numpy as np
 
 @cupy.util.memoize(for_each_device=True)
 def cunnex(strFunction):
@@ -165,7 +166,7 @@ extern "C" __global__ void DensePNormBackward_data(const int nthreads,
 		int top_idx = ph * pooled_width_ + pw;
 
 		double x_pow_p_minus1 = 0;
-		double a = (double)padded_bottom_data[bottom_idx]+1e-10;
+		/*double a = (double)padded_bottom_data[bottom_idx]+1e-10;
 		double b = (double)p_data[top_idx]-1;
 		if (abs(b - 1) < 1e-34)
 		  x_pow_p_minus1 = a;
@@ -181,11 +182,11 @@ extern "C" __global__ void DensePNormBackward_data(const int nthreads,
 		    e >>= 1;
 		  }
 		  x_pow_p_minus1 = r * u.d;
-		}
+		}*/
 
 		double x_pow_p = 0;
-		a = (double)padded_bottom_data[bottom_idx];
-		b = (double)p_data[top_idx];
+		double a = (double)padded_bottom_data[bottom_idx];
+		double b = (double)p_data[top_idx];
 		if (abs(b - 1) < 1e-34)
 		  x_pow_p = a;
 		else {
@@ -201,6 +202,9 @@ extern "C" __global__ void DensePNormBackward_data(const int nthreads,
 		  }
 		  x_pow_p = r * u.d;
 		}
+
+
+		x_pow_p_minus1 = x_pow_p / (padded_bottom_data[bottom_idx]+1e-10);
 
 		int ori_bottom_idx = (h-pad_h_) * bottom_width_ + (w-pad_w_);
 		double tmp = ((p_data[top_idx]+1) * x_pow_p - p_data[top_idx] * x_pow_p_minus1 * top_data[top_idx]) / (denominator_data[top_idx]+1e-10);
@@ -229,18 +233,16 @@ class P_Pooling(torch.autograd.Function):
 		assert(bottom_1.size()[2]==bottom_1.size()[3])
 
 		# shift bottom_0 data to non-negative space
-		bottom_0_min = bottom_0.min(keepdim=True,dim=3)[0].min(keepdim=True,dim=2)[0]		# find min values of each channel
+		bottom_0_min = bottom_0.min(keepdim=True,dim=3)[0].min(keepdim=True,dim=2)[0].detach()	# find min values of each channel
 		bottom_0_min = -(F.threshold(-bottom_0_min, 0, 0, inplace=False))			# ignore positive mins
-		bottom_0_non_negative = bottom_0 - bottom_0_min						# shift input data
+		bottom_0_non_negative = bottom_0 - bottom_0_min					# shift input data
 		bottom_0_non_negative = bottom_0_non_negative.to(torch.float64)
-		bottom_0_min = bottom_0_min.to(torch.float64)
 
 		num = bottom_0_non_negative.size()[0]
 		channels = bottom_0_non_negative.size()[1]
 		bottom_size = bottom_0_non_negative.size()[2]
 
 		# reshape top
-		#pooled_size = (int)(math.ceil((float)(bottom_size + 2 * self.pad - self.kernel_size) / self.stride)) + 1
 		pooled_size = (int)(math.floor((float)(bottom_size + 2 * self.pad - (self.kernel_size - 1) - 1) / self.stride) + 1)
 		if self.pad != 0 :
 			if (pooled_size - 1) * self.stride >= bottom_size + self.pad :
@@ -250,12 +252,10 @@ class P_Pooling(torch.autograd.Function):
 
 		assert(pooled_size==bottom_1.size()[2]), "{} vs. {}".format(pooled_size, bottom_1.size()[2])
 
-		#print top, bottom_0_non_negative
-
 		# preprocess
 		# init numerator and denominator
 		numerator_data = top.new_zeros(top.size(), dtype=torch.float64)
-		denominator_data = top.new_zeros(top.size(), dtype=torch.float64).detach()
+		denominator_data = top.new_zeros(top.size(), dtype=torch.float64)
 		# pad bottom[0]
 		padded_input = F.pad(bottom_0_non_negative, (self.pad, self.pad, self.pad, self.pad, 0, 0, 0, 0), mode='constant', value=0)
 		padded_input_size = padded_input.size()[2]
@@ -274,15 +274,18 @@ class P_Pooling(torch.autograd.Function):
 				       self.kernel_size, self.kernel_size, self.stride, self.stride, self.pad, self.pad ],
 				stream=Stream
 			)
-			self.saved = [bottom_1, top, padded_input, numerator_data, denominator_data]
+			self.saved = [bottom_1.to(torch.float32), top.to(torch.float32), padded_input.to(torch.float32), numerator_data, denominator_data]
 		else:
 			raise NotImplementedError()
 
-		return (top + bottom_0_min).to(torch.float32)
+		return top.to(torch.float32) + bottom_0_min
 
 	def backward(self, top_diff):
 		top_diff = top_diff.to(dtype=torch.float64)
 		[bottom_1, top, padded_input, numerator_data, denominator_data] = self.saved
+		bottom_1 = bottom_1.to(torch.float64)
+		top = top.to(torch.float64)
+		padded_input = padded_input.to(torch.float64)
 		num = padded_input.size()[0]
 		channels = padded_input.size()[1]
 		padded_input_size = padded_input.size()[2]
@@ -325,5 +328,7 @@ class P_Pooling(torch.autograd.Function):
 			)
 		else:
 			raise NotImplementedError()
+		# scale up gradients for p
+		bottom_1_diff = bottom_1_diff*3
 
 		return bottom_0_diff.to(torch.float32), bottom_1_diff.to(torch.float32)
