@@ -1,10 +1,12 @@
 import numpy as np
+import scipy.io as sio
 
-vocColormap = np.array([0, 0, 0, 0.5020, 0, 0, 0,0.5020, 0,0.5020,0.5020, 0, 0, 0,0.5020,0.5020, 0,0.5020, 0,0.5020,0.5020,0.5020,0.5020,0.5020,0.2510, 0, 0,0.7529, 0, 0,0.2510, 0.5020, 0, 0.7529, 0.5020, 0,0.2510, 0,0.5020,0.7529, 0,0.5020,0.2510,0.5020,0.5020,0.7529,0.5020,0.5020, 0,0.2510, 0,0.5020,0.2510, 0, 0,0.7529, 0, 0.5020, 0.7529, 0, 0,0.2510,0.5020]).reshape((21,3)).astype(float)
+colormap = sio.loadmat('./data/ade20k/color150.mat')['color']
 
 def Mask2ColorMap(mask):
 	color = np.zeros((mask.shape[0], mask.shape[1], 3))
-	for i in range(21):
-		color[mask==i, :] = vocColormap[i,:]
+	color[mask==0,: = [255,255,255]
+	for i in range(150):
+		color[mask==i+1, :] = colormap[i,:]
 
 	return color
