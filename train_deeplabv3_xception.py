@@ -34,8 +34,8 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
     #segmentation_module.module.encoder.apply(fix_bn)   # fix encoder's bn
 
     if args.overall_stride == 8:
-	segmentation_module.module.encoder.apply(fix_bn)   # fix encoder's bn
-        segmentation_module.module.decoder.apply(fix_bn)   # 8s, fix decoder's bn
+	segmentation_module.encoder.apply(fix_bn)   # fix encoder's bn
+        segmentation_module.decoder.apply(fix_bn)   # 8s, fix decoder's bn
 
     # main loop
     tic = time.time()
@@ -206,6 +206,12 @@ def create_optimizers(nets, args):
 
 def adjust_learning_rate(optimizers, cur_iter, args):
     scale_running_lr = ((1. - float(cur_iter) / args.max_iters) ** args.lr_pow)
+    #if cur_iter < 35*661:
+#	scale_running_lr = 1
+    #elif cur_iter >  and cur_iter < :
+#	scale_running_lr=0.1
+#    else:
+#	scale_running_lr=0.1
     change_multi_encoder = args.lr_encoder * scale_running_lr / args.running_lr_encoder
     change_multi_decoder = args.lr_decoder * scale_running_lr / args.running_lr_decoder
     args.running_lr_encoder = args.lr_encoder * scale_running_lr

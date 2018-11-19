@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 # Our libs
 from data.voc.VOCDataset_newstyle import VOCTestDataset
-from networks import XceptionModelBuilder, ResnetModelBuilder, SegmentationModule
+from networks import XceptionModelBuilder, ResnetModelBuilder, SegmentationModule, XceptionPPoolingModelBuilder
 from utils import AverageMeter, accuracy, intersectionAndUnion, Logger
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
@@ -18,6 +18,7 @@ import lib.utils.data as torchdata
 
 from scipy import misc
 import numpy as np
+import random
 
 import matplotlib.pyplot as plt
 
@@ -40,6 +41,9 @@ def test(segmentation_module, loader, args):
 
             # forward pass
             pred = eval_model(batch_data, segSize=segSize)
+	    if random.random() > 1:
+		batch_data['data'] = torch.flip(batch_data['data'], [3])
+        	pred += torch.flip(eval_model(batch_data, segSize=segSize), [3])
             _, preds = torch.max(pred.data.cpu(), dim=1)
             preds = as_numpy(preds.squeeze(0))[:-batch_data['pad_size'][0],:-batch_data['pad_size'][1]]
 
@@ -50,7 +54,7 @@ def test(segmentation_module, loader, args):
 
 def main(args):
     # Network Builders
-    builder = XceptionModelBuilder()
+    builder = XceptionModelBuilder()	                       ## NOTE: need to be changed!!! ##
     net_encoder = builder.build_encoder(
         arch=args.arch_encoder,
         weights=args.weights_encoder,
@@ -101,8 +105,8 @@ if __name__ == '__main__':
     exec('from '+solver_cfg_name+' import opt')
 
     args = opt()
-    args.weights_encoder = './trainingResults/deeplabv3_xception_allbn_8s_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus5_batchSize15_trainCropSize504_LR_encoder2e-08_LR_decoder2e-08_epoch46+0905-19:07:38/encoder_epoch_46.pth'
-    args.weights_decoder = './trainingResults/deeplabv3_xception_allbn_8s_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus5_batchSize15_trainCropSize504_LR_encoder2e-08_LR_decoder2e-08_epoch46+0905-19:07:38/decoder_epoch_46.pth'
+    args.weights_encoder = '/media/kfxw/Wei Data/deeplabv3_voc/train/deeplabv3_xception_allbn_1sttime_trainset_only_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus1_batchSize16_trainCropSize504_LR_encoder2e-08_LR_decoder2e-08_epoch46+1110-08:07:39/encoder_epoch_43.pth'
+    args.weights_decoder = '/media/kfxw/Wei Data/deeplabv3_voc/train/deeplabv3_xception_allbn_1sttime_trainset_only_xception_deeplabv3_aspp_bilinear_VOC2012aug_ngpus1_batchSize16_trainCropSize504_LR_encoder2e-08_LR_decoder2e-08_epoch46+1110-08:07:39/decoder_epoch_43.pth'
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)

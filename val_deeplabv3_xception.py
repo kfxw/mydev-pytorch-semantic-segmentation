@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 # Our libs
 from data.voc.VOCDataset_newstyle import VOCTrainDataset, VOCValDataset
-from networks import XceptionModelBuilder, SegmentationModule
+from networks import XceptionModelBuilder, SegmentationModule, XceptionPPoolingModelBuilder
 from utils import AverageMeter, accuracy, intersectionAndUnion, Logger
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 from lib.utils import as_numpy, mark_volatile
@@ -38,7 +38,7 @@ def evaluate(segmentation_module, loader, args):
     f = file(args.val_list_file).readlines()
 
     for i in range(len(loader)):
-	batch_data = next(loader)[0]
+        batch_data = next(loader)[0]
 
         # process data
         seg_label = as_numpy(batch_data['seg_label'])
@@ -49,23 +49,25 @@ def evaluate(segmentation_module, loader, args):
 
             # forward pass
             pred = eval_model(batch_data, segSize=segSize)
+            batch_data['data'] = batch_data['data'][:,:,:,::-1]
+            pred += eval_model(batch_data, segSize=segSize)[:,:,:,::-1]
             _, preds = torch.max(pred.data.cpu(), dim=1)
             preds = as_numpy(preds.squeeze(0))
 
-	img = misc.imread(args.root_dataset+'/'+f[i].strip().split(' ')[0])
-	misc.imsave('./tmp/'+f[i].strip().split(' ')[0].split('/')[-1].replace('.jpg','.png'), preds[:img.shape[0],:img.shape[1]].astype(np.uint8))
+    img = misc.imread(args.root_dataset+'/'+f[i].strip().split(' ')[0])
+    misc.imsave('./tmp/'+f[i].strip().split(' ')[0].split('/')[-1].replace('.jpg','.png'), preds[:img.shape[0],:img.shape[1]].astype(np.uint8))
 
-	preds = preds[:img.shape[0],:img.shape[1]]
-	seg_label = seg_label[:,:img.shape[0],:img.shape[1]]
+    preds = preds[:img.shape[0],:img.shape[1]]
+    seg_label = seg_label[:,:img.shape[0],:img.shape[1]]
 
-        # calculate accuracy
-        acc, pix = accuracy(preds, seg_label, 255)
-        intersection, union = intersectionAndUnion(preds, seg_label, args.num_class, 255)
-        acc_meter.update(acc, pix)
-        intersection_meter.update(intersection)
-        union_meter.update(union)
-        mean_iou = (intersection/(union+1e-10))[union!=0].mean()
-        print('[{}] iter {}, accuracy: {:.5f}, mIoU: {:.5f}'
+    # calculate accuracy
+    acc, pix = accuracy(preds, seg_label, 255)
+    intersection, union = intersectionAndUnion(preds, seg_label, args.num_class, 255)
+    acc_meter.update(acc, pix)
+    intersection_meter.update(intersection)
+    union_meter.update(union)
+    mean_iou = (intersection/(union+1e-10))[union!=0].mean()
+    print('[{}] iter {}, accuracy: {:.5f}, mIoU: {:.5f}'
               .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, acc, mean_iou))
 
     iou = intersection_meter.sum / (union_meter.sum + 1e-10)
